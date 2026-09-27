@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "cipher": "aes-256-gcm",
+  "iv": "affdb7a380e0f922a3a7b641",
+  "authTag": "a1e9a8b5f319fa4912639014068251b7",
+  "salt": "96e2fcfb5b5137c15eac9d4af1f91e6e",
+  "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "encryptedAt": "2026-09-23T05:27:34.013Z",
+  "recordCount": 0,
+  "encryptedData": "dac4"
+}
