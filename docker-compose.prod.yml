@@ -27,6 +27,7 @@ services:
     restart: unless-stopped
     ports:
       - '80:80'
+      - '8080:80'
     depends_on:
       - maternal-vault-backend
     networks:
