@@ -1,11 +1,11 @@
 {
   "version": 1,
   "cipher": "aes-256-gcm",
-  "iv": "7b2c9c19b476ec309f2c6a75",
-  "authTag": "b1cb06b62d9251a1982ad216cc36a6d8",
-  "salt": "8a5ee4c4497cc77bb76676f5578dc783",
+  "iv": "71bd3bba7a8b3b18e5aa7579",
+  "authTag": "86cbe3071d3d3005efb87db0c5119320",
+  "salt": "4ddff00106ef54b74a8f5b204250c31d",
   "checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-  "encryptedAt": "2026-09-27T17:26:46.391Z",
+  "encryptedAt": "2026-09-28T05:46:18.366Z",
   "recordCount": 0,
-  "encryptedData": "0287"
+  "encryptedData": "8fee"
 }
