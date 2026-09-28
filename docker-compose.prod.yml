@@ -51,6 +51,10 @@ services:
     ports:
       - '80:80'
       - '8080:80'
+      - '443:443'
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - maternal-vault-backend
     networks:
