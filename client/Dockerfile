@@ -25,8 +25,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-# Robust healthcheck using IPv4 loopback directly and portable busybox wget
+# Robust healthcheck using dedicated /health endpoint
 HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1:80/ || exit 1
+  CMD wget -q -O - http://127.0.0.1:80/health | grep -q 'healthy' || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
