@@ -101,35 +101,23 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to EC2 via SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.EC2_HOST || '13.215.191.93' }}
-          REMOTE_USER: ${{ secrets.EC2_USER || 'ubuntu' }}
-        run: |
-          if [ -z "$SSH_PRIVATE_KEY" ]; then
-            echo "::warning::EC2_SSH_KEY secret is not set in GitHub repository secrets. Skipping automated deployment."
-            echo "To enable automated CD deployment, add EC2_SSH_KEY, EC2_HOST, and EC2_USER in GitHub Secrets."
-            exit 0
-          fi
-
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
-
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$REMOTE_USER@$REMOTE_HOST" "
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST || '13.215.191.93' }}
+          username: ${{ secrets.EC2_USER || 'ubuntu' }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
             set -e
-            echo '🚀 Starting automated deployment on AWS EC2...'
-            cd \$HOME/maternal-vault-system
-            echo '📥 Pulling latest code from GitHub...'
+            echo "🚀 Starting automated deployment on AWS EC2..."
+            cd "$HOME/maternal-vault-system"
+            echo "📥 Pulling latest code from GitHub..."
             git pull origin main
-            echo '🔨 Building and launching production containers...'
+            echo "🔨 Building and launching production containers..."
             docker compose -f docker-compose.prod.yml build
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker compose -f docker-compose.prod.yml ps
-            echo '🩺 Verifying service health...'
+            echo "🩺 Verifying service health..."
             sleep 5
             curl -f http://localhost:80/health || exit 1
             curl -f http://localhost:5000/api/health || exit 1
-            echo '✅ Auto-deployment to AWS EC2 completed successfully!'
-          "
+            echo "✅ Auto-deployment to AWS EC2 completed successfully!"
