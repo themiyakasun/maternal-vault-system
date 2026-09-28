@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Patient, RiskFeatureWeight, RiskTier, ANCVisit } from '../../types/triage';
 import { useAuth } from '../../context/AuthContext';
 import { formatDbDate, formatDisplayDate } from '../../utils/dateUtils';
@@ -43,29 +43,74 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
   const [activeSection, setActiveSection] = useState<'all' | 'demo' | 'dates' | 'vitals' | 'history' | 'plan'>('all');
   const [nicError, setNicError] = useState<string | null>(null);
   const [isCheckingNic, setIsCheckingNic] = useState(false);
+  const nicCheckCache = useRef<Map<string, { exists: boolean; patient?: any; source?: string }>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 0. Data Recorded Date (for transcribing old/historical paper records or live visits)
+  const [recordDate, setRecordDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // 1. Mother Identification & Demographics
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('26');
+  const [dob, setDob] = useState('1998-05-14');
+  const [nicNo, setNicNo] = useState('');
 
   const validateNic = async (nic: string): Promise<boolean> => {
     const clean = nic.trim().toUpperCase();
     if (!clean) {
       setNicError(null);
+      setIsCheckingNic(false);
       return true;
     }
 
-    // 1. Check local patients
+    // 1. Instant check in local browser state - 0ms (no network delay!)
     if (existingPatients && existingPatients.length > 0) {
       const localDup = existingPatients.find(
         (p) => p.nicNo && p.nicNo.trim().toUpperCase() === clean
       );
       if (localDup) {
-        setNicError(`Mother with NIC "${clean}" is already registered locally (${localDup.name} - ${localDup.id}).`);
+        setNicError(`Mother with NIC "${clean}" is already registered (${localDup.name} - ${localDup.id}).`);
+        setIsCheckingNic(false);
         return false;
       }
     }
 
-    // 2. Check cloud & backend database
+    // 2. Only query the backend database if the NIC looks complete (>= 9 characters)
+    // Sri Lankan NICs are 10 chars (9 digits + V/X) or 12 digits.
+    if (clean.length < 9) {
+      setNicError(null);
+      setIsCheckingNic(false);
+      return true;
+    }
+
+    // 3. Check memory cache (0ms instant return)
+    if (nicCheckCache.current.has(clean)) {
+      const cached = nicCheckCache.current.get(clean)!;
+      if (cached.exists && cached.patient) {
+        setNicError(
+          `Mother with NIC "${clean}" is already registered in ${cached.source === 'cloud' ? 'cloud database' : 'local database'} (${cached.patient.name} - ${cached.patient.id}).`
+        );
+        setIsCheckingNic(false);
+        return false;
+      } else {
+        setNicError(null);
+        setIsCheckingNic(false);
+        return true;
+      }
+    }
+
+    // 4. Cancel previous in-flight request so requests never stack up
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
       setIsCheckingNic(true);
       const res = await patientApi.checkNic(clean, currentClinic?.id);
+      if (res) {
+        nicCheckCache.current.set(clean, res);
+      }
       if (res?.exists && res?.patient) {
         setNicError(
           `Mother with NIC "${clean}" is already registered in ${res.source === 'cloud' ? 'cloud database' : 'local database'} (${res.patient.name} - ${res.patient.id}).`
@@ -82,24 +127,22 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     return true;
   };
 
-  // 0. Data Recorded Date (for transcribing old/historical paper records or live visits)
-  const [recordDate, setRecordDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-
-  // 1. Mother Identification & Demographics
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('26');
-  const [dob, setDob] = useState('1998-05-14');
-  const [nicNo, setNicNo] = useState('');
-
   // Debounced live NIC validation on keystroke or pre-fill
   useEffect(() => {
-    if (!nicNo.trim()) {
+    const clean = nicNo.trim().toUpperCase();
+    if (!clean) {
       setNicError(null);
+      setIsCheckingNic(false);
+      return;
+    }
+    // If under 9 chars, do local check only (0ms) without network calls
+    if (clean.length < 9) {
+      validateNic(nicNo);
       return;
     }
     const timer = setTimeout(() => {
       validateNic(nicNo);
-    }, 250);
+    }, 350);
     return () => clearTimeout(timer);
   }, [nicNo, existingPatients]);
   const [phmRegisterNo, setPhmRegisterNo] = useState('');

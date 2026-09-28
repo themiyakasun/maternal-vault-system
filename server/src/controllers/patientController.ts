@@ -1455,35 +1455,35 @@ export const checkPatientNic = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. Check Cloud PostgreSQL (universal NIC lookup)
+    // 2. Check Cloud PostgreSQL (fast indexed lookup with 800ms timeout)
     try {
-      const isOnline = await probePostgres();
-      if (isOnline) {
-        const client = await pool.connect();
-        const pgRes = await client.query(
+      const pgRes = await Promise.race([
+        pool.query(
           `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 LIMIT 1`,
           [cleanNic]
-        );
-        client.release();
-        if (pgRes.rows.length > 0) {
-          const row = pgRes.rows[0];
-          if (!excludeId || row.id !== excludeId) {
-            return res.json({
-              success: true,
-              exists: true,
-              source: 'cloud',
-              patient: {
-                id: row.id,
-                name: row.name,
-                nicNo: row.nic_no,
-                clinicId: row.tenant_id,
-              },
-            });
-          }
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('PostgreSQL NIC query timeout')), 800)
+        ),
+      ]);
+      if (pgRes && pgRes.rows && pgRes.rows.length > 0) {
+        const row = pgRes.rows[0];
+        if (!excludeId || row.id !== excludeId) {
+          return res.json({
+            success: true,
+            exists: true,
+            source: 'cloud',
+            patient: {
+              id: row.id,
+              name: row.name,
+              nicNo: row.nic_no,
+              clinicId: row.tenant_id,
+            },
+          });
         }
       }
-    } catch (err) {
-      console.warn('PostgreSQL NIC verification check warning:', err);
+    } catch {
+      // Cloud check skipped/timed out; local check already completed
     }
 
     return res.json({ success: true, exists: false });

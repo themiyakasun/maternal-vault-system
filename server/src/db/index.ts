@@ -204,6 +204,7 @@ export async function initDatabase() {
       `ALTER TABLE patients ADD COLUMN IF NOT EXISTS anc_visits JSONB DEFAULT '[]'::jsonb;`,
       `ALTER TABLE patients ADD COLUMN IF NOT EXISTS ml_risk_assessment JSONB;`,
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_tenant_nic ON patients (tenant_id, UPPER(TRIM(nic_no))) WHERE nic_no IS NOT NULL AND nic_no != '';`,
+      `CREATE INDEX IF NOT EXISTS idx_patients_nic_universal ON patients (UPPER(TRIM(nic_no))) WHERE nic_no IS NOT NULL AND nic_no != '';`,
     ];
 
     for (const q of alterQueries) {
