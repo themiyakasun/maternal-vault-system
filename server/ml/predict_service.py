@@ -76,20 +76,29 @@ def load_models():
 
     print(f"📦 Loading ML models from: {MODELS_DIR}")
     if os.path.exists(maternal_path):
-        maternal_model = joblib.load(maternal_path)
-        print("  ✓ Loaded maternal_risk_model.pkl")
+        try:
+            maternal_model = joblib.load(maternal_path)
+            print("  ✓ Loaded maternal_risk_model.pkl")
+        except Exception as e:
+            print(f"  ❌ Failed to load maternal_risk_model.pkl: {e}", file=sys.stderr)
     else:
         print(f"  ❌ Missing {maternal_path}", file=sys.stderr)
 
     if os.path.exists(anemia_path):
-        anemia_model = joblib.load(anemia_path)
-        print("  ✓ Loaded nutritional_anemia_tracker_model.pkl")
+        try:
+            anemia_model = joblib.load(anemia_path)
+            print("  ✓ Loaded nutritional_anemia_tracker_model.pkl")
+        except Exception as e:
+            print(f"  ❌ Failed to load nutritional_anemia_tracker_model.pkl: {e}", file=sys.stderr)
     else:
         print(f"  ❌ Missing {anemia_path}", file=sys.stderr)
 
     if os.path.exists(depression_path):
-        depression_model = joblib.load(depression_path)
-        print("  ✓ Loaded prenatal_depression_model.pkl")
+        try:
+            depression_model = joblib.load(depression_path)
+            print("  ✓ Loaded prenatal_depression_model.pkl")
+        except Exception as e:
+            print(f"  ❌ Failed to load prenatal_depression_model.pkl: {e}", file=sys.stderr)
     else:
         print(f"  ❌ Missing {depression_path}", file=sys.stderr)
 

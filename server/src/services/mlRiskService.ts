@@ -75,6 +75,8 @@ function findPythonBin(): string {
 
   const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
   const candidates = [
+    '/app/venv/bin/python',
+    path.resolve(process.cwd(), 'venv/bin/python'),
     path.resolve(currentDir, '../../../../.venv/bin/python'),
     path.resolve(currentDir, '../../../.venv/bin/python'),
     path.resolve(currentDir, '../../.venv/bin/python'),
