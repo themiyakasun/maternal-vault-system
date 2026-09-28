@@ -1,4 +1,24 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: maternal-vault-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-maternal_vault}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-maternal_vault}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maternal-net
+
   maternal-vault-backend:
     build:
       context: ./server
@@ -12,7 +32,10 @@ services:
       - PORT=5000
       - STATION_MASTER_KEY=${STATION_MASTER_KEY:-MATERNA_VAULT_SECURE_PHM_MUM_71_SECRET_KEY}
       - OFFLINE_TOKEN_SECRET=${OFFLINE_TOKEN_SECRET:-MATERNA_VAULT_OFFLINE_STATION_HMAC_SECRET_9876}
-      - DATABASE_URL=${DATABASE_URL:-}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/maternal_vault}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./server/ml:/app/ml
@@ -39,4 +62,6 @@ networks:
 
 volumes:
   maternal_data:
+    driver: local
+  postgres_data:
     driver: local
