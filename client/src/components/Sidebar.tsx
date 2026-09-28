@@ -9,6 +9,7 @@ import {
   X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { MaternaVaultLogo } from './Common/MaternaVaultLogo';
 
 interface SidebarProps {
   activeTab: string;
@@ -46,20 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div>
         <div className="p-4 sm:p-5 border-b border-[#e2e8f0] flex items-center justify-between bg-[#faf8ff]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#006194] text-white flex items-center justify-center font-bold shadow-xs ring-1 ring-[#006194]/20">
-              <div className="relative flex items-center justify-center">
-                <span className="text-xl font-black leading-none">M</span>
-                <span className="absolute -top-1 -right-1.5 text-[9px] text-[#7bc2ff]">✦</span>
-              </div>
-            </div>
-            <div>
-              <h1 className="text-[15px] font-bold text-[#131b2e] tracking-tight flex items-center gap-1.5">
-                MaternaVault
-              </h1>
-              <p className="text-[11px] font-medium text-[#707881] tracking-wide">
-                Midwife Clinic Station
-              </p>
-            </div>
+            <MaternaVaultLogo 
+              size={38} 
+              variant="badge" 
+              showText 
+              subtitle="Midwife Clinic Station" 
+            />
           </div>
 
           {/* Close button on mobile drawer */}

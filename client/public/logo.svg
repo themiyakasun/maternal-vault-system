@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Ocean to Sky Gradient for App Icon Squircle -->
+    <linearGradient id="mvGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#003f66" />
+      <stop offset="45%" stop-color="#006194" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <!-- Cyan Glow for Baby and Clinical Tech -->
+    <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#7dd3fc" />
+    </linearGradient>
+
+    <!-- Warm Rose Accent for Vital Heart -->
+    <linearGradient id="roseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb7185" />
+      <stop offset="100%" stop-color="#f43f5e" />
+    </linearGradient>
+
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base Frame -->
+  <rect x="2" y="2" width="124" height="124" rx="28" fill="url(#mvGrad)" />
+  <rect x="2" y="2" width="124" height="124" rx="28" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" />
+
+  <!-- Protective Vault Perimeter (Subtle Shield) -->
+  <path d="M64 16 C88 16 104 28 104 54 C104 82 64 108 64 108 C64 108 24 82 24 54 C24 28 40 16 64 16 Z" 
+        fill="rgba(255, 255, 255, 0.04)" 
+        stroke="rgba(255, 255, 255, 0.15)" 
+        stroke-width="1.8" 
+        stroke-dasharray="4 3" />
+
+  <!-- Emblem Group -->
+  <g filter="url(#subtleShadow)">
+    <!-- Mother Head -->
+    <circle cx="46" cy="34" r="8.5" fill="#ffffff" />
+
+    <!-- Baby Head -->
+    <circle cx="73" cy="45" r="6.2" fill="url(#cyanGlow)" />
+
+    <!-- Mother's Sweeping Loving Embrace (Continuous smooth arc curving into a heart-shield base) -->
+    <path d="M 42 45 
+             C 27 50, 22 65, 25 78 
+             C 29 90, 44 100, 64 104 
+             C 84 100, 99 90, 103 78 
+             C 106 65, 99 52, 86 50 
+             C 78 48, 70 54, 66 63" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="7.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+
+    <!-- Baby's Nestled Cradled Curve -->
+    <path d="M 75 54 
+             C 80 59, 81 68, 77 74 
+             C 73 80, 65 83, 57 80 
+             C 51 77, 48 70, 51 64" 
+          fill="none" 
+          stroke="url(#cyanGlow)" 
+          stroke-width="6" 
+          stroke-linecap="round" />
+
+    <!-- Care Heart in Center Core -->
+    <path d="M 64 71 
+             C 64 68, 61.5 66, 59 67.5 
+             C 56.5 66, 54 68, 54 71 
+             C 54 75, 59 78, 59 78 
+             C 59 78, 64 75, 64 71 Z" 
+          fill="url(#roseGrad)" />
+  </g>
+
+  <!-- Clinical Security Star in Top-Right -->
+  <g transform="translate(95, 20)">
+    <path d="M 6 0 L 7.5 4.5 L 12 6 L 7.5 7.5 L 6 12 L 4.5 7.5 L 0 6 L 4.5 4.5 Z" 
+          fill="url(#cyanGlow)" />
+  </g>
+</svg>

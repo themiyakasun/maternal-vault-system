@@ -12,6 +12,7 @@ import {
   KeyRound, 
   LogIn 
 } from 'lucide-react';
+import { MaternaVaultLogo } from '../Common/MaternaVaultLogo';
 
 export const MidwifeLoginModal: React.FC = () => {
   const { 
@@ -76,9 +77,7 @@ export const MidwifeLoginModal: React.FC = () => {
         <div className="bg-[#004b73] text-white p-6 relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center font-bold text-lg shadow-inner ring-1 ring-white/20">
-                <span className="text-[#38bdf8]">M</span>
-              </div>
+              <MaternaVaultLogo size={42} variant="badge" />
               <div>
                 <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
                   <span>MaternaVault</span>

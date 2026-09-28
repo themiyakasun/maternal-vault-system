@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, RefreshCw, Lock, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { MaternaVaultLogo } from './Common/MaternaVaultLogo';
 
 interface HeaderProps {
   onTriggerSync?: () => void;
@@ -61,6 +62,10 @@ export const Header: React.FC<HeaderProps> = ({
             <Menu className="w-5 h-5 text-[#006194]" />
           </button>
         )}
+
+        <div className="md:hidden shrink-0">
+          <MaternaVaultLogo size={28} variant="badge" />
+        </div>
 
         <div className="min-w-0">
           <h2 className="text-xs sm:text-sm font-bold text-[#0f172a] leading-tight flex items-center gap-1.5 truncate">
