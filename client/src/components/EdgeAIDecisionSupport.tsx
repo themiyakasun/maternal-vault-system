@@ -114,15 +114,15 @@ export const EdgeAIDecisionSupport: React.FC<EdgeAIDecisionSupportProps> = ({
         </div>
       </div>
 
-      {/* 3 ML Models Evaluation Breakdown */}
+      {/* 3 Models Clinical Risk Breakdown */}
       <div className="space-y-2 pt-1">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-[#0f172a] uppercase tracking-wider flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-[#0284c7]" />
-            <span>3-Model Edge ML Inference</span>
+            <span>Automated Health Risk Screening</span>
           </span>
           <span className="text-[10px] font-mono text-[#006194] bg-[#e0f2fe] px-1.5 py-0.5 rounded font-semibold">
-            On-Device Fast ML
+            Instant Clinic Check
           </span>
         </div>
 
@@ -138,7 +138,7 @@ export const EdgeAIDecisionSupport: React.FC<EdgeAIDecisionSupportProps> = ({
                   Maternal Clinical Health Risk
                 </div>
                 <div className="text-[10px] text-[#64748b]">
-                  {ml ? `Model: ${ml.maternalRisk.model}` : 'XGBoost Clinical Health Model'}
+                  Vital signs, blood pressure & glucose screening
                 </div>
               </div>
             </div>
@@ -190,7 +190,7 @@ export const EdgeAIDecisionSupport: React.FC<EdgeAIDecisionSupportProps> = ({
                   Perinatal Distress Screener
                 </div>
                 <div className="text-[10px] text-[#64748b]">
-                  {ml?.depressionRisk.flag || 'ADASYN-XGBoost Screener'}
+                  {ml?.depressionRisk.flag || 'Psychosocial & wellbeing check'}
                 </div>
               </div>
             </div>

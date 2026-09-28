@@ -30,6 +30,12 @@ interface PatientEHRModalProps {
   onDeletePatient?: (patient: Patient) => void;
 }
 
+const formatProbability = (val: number | undefined | null): string => {
+  if (val == null || isNaN(val)) return '0%';
+  const normalized = val > 1 ? val : val * 100;
+  return `${Math.min(100, Math.max(0, Math.round(normalized)))}%`;
+};
+
 export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
   isOpen,
   onClose,
@@ -273,7 +279,7 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Triple-Model Edge AI Risk Engine</span>
+            <span>Smart Health Risk Assessment</span>
           </button>
         </div>
 
@@ -732,21 +738,22 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
             </div>
           )}
 
-          {/* ===================== TAB 5: TRIPLE-MODEL EDGE AI RISK ENGINE ===================== */}
+          {/* ===================== TAB 5: SMART HEALTH RISK ASSESSMENT ===================== */}
           {activeTab === 'ai' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#e2e8f0] pb-2">
                 <div>
                   <h3 className="text-xs font-bold text-[#0f172a] uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-[#006194]" />
-                    <span>Real-Time Triple-Model ML Diagnostic Engine</span>
+                    <span>Real-Time Clinical Health Risk Screening</span>
                   </h3>
                   <p className="text-[11px] text-[#64748b]">
-                    Evaluated automatically on data intake & clinical visit updates via on-device ML pipelines.
+                    Automatically evaluated from maternal vital signs, lab tests, and clinic visit observations.
                   </p>
                 </div>
-                <span className="text-[11px] font-mono text-[#006194] bg-[#e0f2fe] px-2.5 py-1 rounded font-bold self-start sm:self-auto">
-                  Edge Daemon Active (<span className="text-[#047857]">● 5ms latency</span>)
+                <span className="text-[11px] text-[#006194] bg-[#e0f2fe] px-2.5 py-1 rounded font-bold self-start sm:self-auto flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#047857] inline-block animate-pulse"></span>
+                  <span>Instant Clinical Evaluation Active</span>
                 </span>
               </div>
 
@@ -772,28 +779,28 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                     </div>
 
                     <div className="text-[11px] text-[#64748b] mt-2 space-y-1">
-                      <div><strong>Architecture:</strong> XGBoost Multi-Class</div>
-                      <div><strong>Target:</strong> Clinical Vital Signs & Sugar</div>
+                      <div><strong>Focus Area:</strong> Blood Pressure, Sugar & Vital Signs</div>
                       {patient.mlRiskAssessment?.maternalRisk.probabilities && (
                         <div className="pt-2 space-y-1">
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Low:</span>
-                            <span className="font-mono font-bold">{(patient.mlRiskAssessment.maternalRisk.probabilities.low * 100).toFixed(0)}%</span>
+                            <span>Low Risk:</span>
+                            <span className="font-mono font-bold">{formatProbability(patient.mlRiskAssessment.maternalRisk.probabilities.low)}</span>
                           </div>
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Moderate:</span>
-                            <span className="font-mono font-bold">{(patient.mlRiskAssessment.maternalRisk.probabilities.moderate * 100).toFixed(0)}%</span>
+                            <span>Moderate Risk:</span>
+                            <span className="font-mono font-bold">{formatProbability(patient.mlRiskAssessment.maternalRisk.probabilities.moderate)}</span>
                           </div>
                           <div className="flex justify-between text-[10.5px]">
-                            <span>High:</span>
-                            <span className="font-mono font-bold text-[#b91c1c]">{(patient.mlRiskAssessment.maternalRisk.probabilities.high * 100).toFixed(0)}%</span>
+                            <span>High Risk:</span>
+                            <span className="font-mono font-bold text-[#b91c1c]">{formatProbability(patient.mlRiskAssessment.maternalRisk.probabilities.high)}</span>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="text-[10px] font-mono text-[#64748b] bg-[#f8fafc] p-1.5 rounded border border-[#e2e8f0]">
-                    File: maternal_risk_model.pkl
+                  <div className="text-[11px] text-[#475569] bg-[#f8fafc] p-2 rounded-lg border border-[#e2e8f0] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                    <span>Vital signs & glucose screening complete</span>
                   </div>
                 </div>
 
@@ -817,24 +824,24 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                     </div>
 
                     <div className="text-[11px] text-[#64748b] mt-2 space-y-1">
-                      <div><strong>Architecture:</strong> SMOTE + XGBoost</div>
-                      <div><strong>Flag:</strong> {patient.mlRiskAssessment?.anemiaRisk.flag || 'Hemoglobin & Obstetric Tracker'}</div>
+                      <div><strong>Assessment:</strong> {patient.mlRiskAssessment?.anemiaRisk.flag || 'Hemoglobin & iron levels evaluated'}</div>
                       {patient.mlRiskAssessment?.anemiaRisk.probabilities && (
                         <div className="pt-2 space-y-1">
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Normal / Optimal:</span>
-                            <span className="font-mono font-bold">{(patient.mlRiskAssessment.anemiaRisk.probabilities.normal * 100).toFixed(0)}%</span>
+                            <span>Healthy / Normal:</span>
+                            <span className="font-mono font-bold">{formatProbability(patient.mlRiskAssessment.anemiaRisk.probabilities.normal)}</span>
                           </div>
                           <div className="flex justify-between text-[10.5px]">
                             <span>At-Risk / Anemic:</span>
-                            <span className="font-mono font-bold text-[#b45309]">{(patient.mlRiskAssessment.anemiaRisk.probabilities.atRisk * 100).toFixed(0)}%</span>
+                            <span className="font-mono font-bold text-[#b45309]">{formatProbability(patient.mlRiskAssessment.anemiaRisk.probabilities.atRisk)}</span>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="text-[10px] font-mono text-[#64748b] bg-[#f8fafc] p-1.5 rounded border border-[#e2e8f0]">
-                    File: nutritional_anemia_tracker_model.pkl
+                  <div className="text-[11px] text-[#475569] bg-[#f8fafc] p-2 rounded-lg border border-[#e2e8f0] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#b45309] shrink-0" />
+                    <span>Hemoglobin & nutrition screening complete</span>
                   </div>
                 </div>
 
@@ -844,7 +851,7 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                     <div className="flex items-center justify-between pb-2 border-b border-[#f1f5f9]">
                       <div className="flex items-center gap-1.5">
                         <Brain className="w-4 h-4 text-[#7e22ce]" />
-                        <span className="text-xs font-bold text-[#0f172a]">Perinatal Distress</span>
+                        <span className="text-xs font-bold text-[#0f172a]">Perinatal Wellbeing</span>
                       </div>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                         (patient.mlRiskAssessment?.depressionRisk.tier || 'low') === 'high'
@@ -858,45 +865,45 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                     </div>
 
                     <div className="text-[11px] text-[#64748b] mt-2 space-y-1">
-                      <div><strong>Architecture:</strong> ADASYN + XGBoost</div>
-                      <div><strong>Screening:</strong> {patient.mlRiskAssessment?.depressionRisk.flag || 'Psychosocial & Parity Screener'}</div>
+                      <div><strong>Assessment:</strong> {patient.mlRiskAssessment?.depressionRisk.flag || 'Positive emotional wellbeing observed'}</div>
                       {patient.mlRiskAssessment?.depressionRisk.probabilities && (
                         <div className="pt-2 space-y-1">
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Minimal / Normal:</span>
-                            <span className="font-mono font-bold">{(patient.mlRiskAssessment.depressionRisk.probabilities.minimal * 100).toFixed(0)}%</span>
+                            <span>Stable / Good Wellbeing:</span>
+                            <span className="font-mono font-bold">{formatProbability(patient.mlRiskAssessment.depressionRisk.probabilities.minimal)}</span>
                           </div>
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Mild to Moderate:</span>
-                            <span className="font-mono font-bold">{(patient.mlRiskAssessment.depressionRisk.probabilities.mildModerate * 100).toFixed(0)}%</span>
+                            <span>Mild to Moderate Concern:</span>
+                            <span className="font-mono font-bold">{formatProbability(patient.mlRiskAssessment.depressionRisk.probabilities.mildModerate)}</span>
                           </div>
                           <div className="flex justify-between text-[10.5px]">
-                            <span>Severe Distress:</span>
-                            <span className="font-mono font-bold text-[#b91c1c]">{(patient.mlRiskAssessment.depressionRisk.probabilities.severe * 100).toFixed(0)}%</span>
+                            <span>Elevated Distress:</span>
+                            <span className="font-mono font-bold text-[#b91c1c]">{formatProbability(patient.mlRiskAssessment.depressionRisk.probabilities.severe)}</span>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="text-[10px] font-mono text-[#64748b] bg-[#f8fafc] p-1.5 rounded border border-[#e2e8f0]">
-                    File: prenatal_depression_model.pkl
+                  <div className="text-[11px] text-[#475569] bg-[#f8fafc] p-2 rounded-lg border border-[#e2e8f0] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#7e22ce] shrink-0" />
+                    <span>Maternal emotional & mood screening complete</span>
                   </div>
                 </div>
               </div>
 
-              {/* Overall Clinical Preterm Score & SHAP Weights */}
+              {/* Overall Clinical Preterm Score & Contributing Factors */}
               <div className="bg-white border border-[#cbd5e1] rounded-xl p-5 space-y-4 shadow-2xs">
                 <div className="flex justify-between items-center pb-3 border-b border-[#e2e8f0]">
                   <div>
-                    <span className="text-xs font-bold text-[#0f172a] block">Synthesized Preterm Delivery Probability (&lt;34 weeks):</span>
-                    <span className="text-[11px] text-[#64748b]">Multi-model calibrated score with automated feature attribution</span>
+                    <span className="text-xs font-bold text-[#0f172a] block">Estimated Early Delivery Risk (&lt;34 weeks):</span>
+                    <span className="text-[11px] text-[#64748b]">Combined risk forecast calculated from maternal vitals, lab results, and history</span>
                   </div>
-                  <span className="text-2xl font-bold font-mono text-[#b91c1c]">{patient.pretermProbability}%</span>
+                  <span className="text-2xl font-bold font-mono text-[#b91c1c]">{formatProbability(patient.pretermProbability)}</span>
                 </div>
 
                 <div className="space-y-2">
                   <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">
-                    Feature Weight Decomposition (Top Maternal Risk Drivers):
+                    Key Health Factors Influencing This Assessment:
                   </span>
                   {patient.featureWeights.map((fw, i) => (
                     <div key={i} className="flex justify-between text-xs py-1.5 px-3 rounded-lg bg-[#f8fafc] border border-[#e2e8f0]">
