@@ -4,6 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import app from '../src/app.js';
 import { localEncryptedDb } from '../src/db/localEncryptedDb.js';
+import { tenantStore } from '../src/db/tenantStore.js';
 
 describe('6. Full End-to-End API Integration Testing', () => {
   let server: http.Server;
@@ -15,6 +16,17 @@ describe('6. Full End-to-End API Integration Testing', () => {
   before(async () => {
     // Initialize Local AES-256-GCM Encrypted DB for edge operations
     localEncryptedDb.init();
+
+    // Register a test staff account for API authentication testing
+    await tenantStore.createStaffMember({
+      id: 'PHM-PRIYA-71',
+      name: 'Sister Priya Sharma',
+      title: 'Public Health Midwife (Lead)',
+      role: 'phm_lead',
+      clinicId: 'clinic-4b-rampur',
+      password: 'Priya@Materna2026!',
+      assignedBeats: ['Rampur Sector 1', 'Rampur Sector 2'],
+    });
 
     // Start server on an ephemeral random OS port (0) to prevent collisions
     await new Promise<void>((resolve) => {

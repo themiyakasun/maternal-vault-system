@@ -24,67 +24,7 @@ export const FALLBACK_CLINICS: Clinic[] = [
   },
 ];
 
-export const FALLBACK_STAFF: Record<string, (StaffUser & { defaultPassword: string; defaultPin?: string })[]> = {
-  'clinic-4b-rampur': [
-    {
-      id: 'PHM-PRIYA-71',
-      name: 'Sister Priya Sharma',
-      title: 'Public Health Midwife (Lead)',
-      role: 'phm_lead',
-      clinicId: 'clinic-4b-rampur',
-      clinicName: 'Primary Health Post 4B',
-      avatarUrl: 'https://images.unsplash.com/photo-1594824813501-4835002b1f3c?w=120&auto=format&fit=crop&q=80',
-      initials: 'PS',
-      isActive: true,
-      assignedBeats: ['Rampur Sector 1', 'Rampur Sector 2', 'Rampur Sector 3'],
-      defaultPassword: 'Priya@Materna2026!',
-      defaultPin: '1234',
-    },
-    {
-      id: 'PHM-SUNITA-02',
-      name: 'Sister Sunita Bai',
-      title: 'Public Health Midwife',
-      role: 'phm',
-      clinicId: 'clinic-4b-rampur',
-      clinicName: 'Primary Health Post 4B',
-      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-      initials: 'SB',
-      isActive: true,
-      assignedBeats: ['Rampur Sector 4', 'Rampur Sector 5'],
-      defaultPassword: 'Sunita@Care2026!',
-      defaultPin: '5678',
-    },
-    {
-      id: 'DOC-RAJIV-01',
-      name: 'Dr. Rajiv Sen',
-      title: 'MOH Medical Officer',
-      role: 'doctor',
-      clinicId: 'clinic-4b-rampur',
-      clinicName: 'Primary Health Post 4B',
-      avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=120&auto=format&fit=crop&q=80',
-      initials: 'RS',
-      isActive: true,
-      defaultPassword: 'DrRajiv@MOH2026!',
-      defaultPin: '9900',
-    },
-  ],
-  'clinic-02-kandy': [
-    {
-      id: 'PHM-ANJALI-14',
-      name: 'Sister Anjali Perera',
-      title: 'Public Health Midwife (Lead)',
-      role: 'phm_lead',
-      clinicId: 'clinic-02-kandy',
-      clinicName: 'Sub-Center Kandy Rural',
-      avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=120&auto=format&fit=crop&q=80',
-      initials: 'AP',
-      isActive: true,
-      assignedBeats: ['Kandy Sector 1', 'Kandy Sector 2'],
-      defaultPassword: 'Anjali@Kandy2026!',
-      defaultPin: '2468',
-    },
-  ],
-};
+export const FALLBACK_STAFF: Record<string, (StaffUser & { defaultPassword?: string; defaultPin?: string })[]> = {};
 
 export const authApi = {
   /**

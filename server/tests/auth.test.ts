@@ -1,9 +1,21 @@
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 import { tenantStore } from '../src/db/tenantStore.js';
 import { hashPassword, generateSalt } from '../src/db/index.js';
 
 describe('1. Authentication & Security Engine', () => {
+  before(async () => {
+    await tenantStore.createStaffMember({
+      id: 'PHM-PRIYA-71',
+      name: 'Sister Priya Sharma',
+      title: 'Public Health Midwife (Lead)',
+      role: 'phm_lead',
+      clinicId: 'clinic-4b-rampur',
+      password: 'Priya@Materna2026!',
+      assignedBeats: ['Rampur Sector 1', 'Rampur Sector 2'],
+    });
+  });
+
   it('should list all configured clinic stations', async () => {
     const clinics = await tenantStore.getClinics();
     assert.ok(Array.isArray(clinics), 'Clinics should be an array');

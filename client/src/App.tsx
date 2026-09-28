@@ -829,7 +829,7 @@ function DashboardContent() {
                 <input
                   type="text"
                   readOnly
-                  value={`${currentUser?.id || 'PHM-PRIYA-71'} (${currentUser?.name || 'Sister Priya Sharma'} • ${currentUser?.title || 'PHM Lead'})`}
+                  value={currentUser ? `${currentUser.id} (${currentUser.name} • ${currentUser.title})` : 'No Active Midwife Logged In'}
                   className="w-full px-3 py-2 border border-[#cbd5e1] rounded-lg bg-[#f8fafc] font-medium"
                 />
               </div>

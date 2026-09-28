@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import type { StaffUser } from '../types/auth.js';
-import { generateSalt, hashPassword, hashPin } from './index.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const VAULT_FILE = path.join(DATA_DIR, 'staff_vault_encrypted.db');
@@ -78,78 +77,9 @@ function encryptAndSaveVault(data: VaultData): void {
   }
 }
 
-function getInitialSeedVault(): VaultData {
-  const priyaSalt = generateSalt();
-  const sunitaSalt = generateSalt();
-  const rajivSalt = generateSalt();
-  const anjaliSalt = generateSalt();
-
+function getEmptyVault(): VaultData {
   return {
-    staffByClinic: {
-      'clinic-4b-rampur': [
-        {
-          id: 'PHM-PRIYA-71',
-          name: 'Sister Priya Sharma',
-          title: 'Public Health Midwife (Lead)',
-          role: 'phm_lead',
-          clinicId: 'clinic-4b-rampur',
-          clinicName: 'Primary Health Post 4B',
-          avatarUrl: 'https://images.unsplash.com/photo-1594824813501-4835002b1f3c?w=120&auto=format&fit=crop&q=80',
-          initials: 'PS',
-          salt: priyaSalt,
-          passwordHash: hashPassword('Priya@Materna2026!', priyaSalt),
-          pinHash: hashPin('1234', priyaSalt),
-          isActive: true,
-          assignedBeats: ['Rampur Sector 1', 'Rampur Sector 2', 'Rampur Sector 3'],
-        },
-        {
-          id: 'PHM-SUNITA-02',
-          name: 'Sister Sunita Bai',
-          title: 'Public Health Midwife',
-          role: 'phm',
-          clinicId: 'clinic-4b-rampur',
-          clinicName: 'Primary Health Post 4B',
-          avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-          initials: 'SB',
-          salt: sunitaSalt,
-          passwordHash: hashPassword('Sunita@Care2026!', sunitaSalt),
-          pinHash: hashPin('5678', sunitaSalt),
-          isActive: true,
-          assignedBeats: ['Rampur Sector 4', 'Rampur Sector 5'],
-        },
-        {
-          id: 'DOC-RAJIV-01',
-          name: 'Dr. Rajiv Sen',
-          title: 'MOH Medical Officer',
-          role: 'doctor',
-          clinicId: 'clinic-4b-rampur',
-          clinicName: 'Primary Health Post 4B',
-          avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=120&auto=format&fit=crop&q=80',
-          initials: 'RS',
-          salt: rajivSalt,
-          passwordHash: hashPassword('DrRajiv@MOH2026!', rajivSalt),
-          pinHash: hashPin('9900', rajivSalt),
-          isActive: true,
-        },
-      ],
-      'clinic-02-kandy': [
-        {
-          id: 'PHM-ANJALI-14',
-          name: 'Sister Anjali Perera',
-          title: 'Public Health Midwife (Lead)',
-          role: 'phm_lead',
-          clinicId: 'clinic-02-kandy',
-          clinicName: 'Sub-Center Kandy Rural',
-          avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=120&auto=format&fit=crop&q=80',
-          initials: 'AP',
-          salt: anjaliSalt,
-          passwordHash: hashPassword('Anjali@Kandy2026!', anjaliSalt),
-          pinHash: hashPin('2468', anjaliSalt),
-          isActive: true,
-          assignedBeats: ['Kandy Sector 1', 'Kandy Sector 2'],
-        },
-      ],
-    },
+    staffByClinic: {},
     offlineAuditQueue: [],
   };
 }
@@ -157,7 +87,7 @@ function getInitialSeedVault(): VaultData {
 function decryptAndLoadVault(): VaultData {
   try {
     if (!fs.existsSync(VAULT_FILE)) {
-      const initial = getInitialSeedVault();
+      const initial = getEmptyVault();
       encryptAndSaveVault(initial);
       return initial;
     }
@@ -183,12 +113,12 @@ function decryptAndLoadVault(): VaultData {
 
     return JSON.parse(decrypted);
   } catch (err) {
-    console.warn('⚠️  Could not decrypt existing staff vault (station key changed or fresh deployment). Re-encrypting fresh default staff vault with active station key.');
-    const initial = getInitialSeedVault();
+    console.warn('⚠️  Could not decrypt existing staff vault (station key changed or fresh deployment). Initializing empty staff vault with active station key.');
+    const initial = getEmptyVault();
     try {
       encryptAndSaveVault(initial);
     } catch (saveErr) {
-      console.warn('Could not persist re-encrypted staff vault:', saveErr);
+      console.warn('Could not persist empty staff vault:', saveErr);
     }
     return initial;
   }

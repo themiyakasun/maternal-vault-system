@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Clinic, StaffUser, LoginResponse } from '../types/auth';
-import { authApi, FALLBACK_CLINICS, FALLBACK_STAFF } from '../services/authApi';
+import { authApi, FALLBACK_CLINICS } from '../services/authApi';
 
 interface AuthContextType {
   currentUser: StaffUser | null;
@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [currentClinic, setCurrentClinic] = useState<Clinic | null>(null);
   const [clinics, setClinics] = useState<Clinic[]>(FALLBACK_CLINICS);
-  const [clinicStaff, setClinicStaff] = useState<StaffUser[]>(FALLBACK_STAFF['clinic-4b-rampur'] || []);
+  const [clinicStaff, setClinicStaff] = useState<StaffUser[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -47,13 +47,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLocked(false);
 
           const staffList = await authApi.getStaffForClinic(session.clinic.id);
-          setClinicStaff(staffList.length > 0 ? staffList : (FALLBACK_STAFF[session.clinic.id] || []));
+          setClinicStaff(staffList || []);
         } else {
           // Default to first clinic in list (unauthenticated state)
           const defaultClinic = fetchedClinics[0] || FALLBACK_CLINICS[0];
           setCurrentClinic(defaultClinic);
           const staffList = await authApi.getStaffForClinic(defaultClinic.id);
-          setClinicStaff(staffList.length > 0 ? staffList : (FALLBACK_STAFF[defaultClinic.id] || []));
+          setClinicStaff(staffList || []);
           setIsAuthenticated(false);
         }
       } catch (err) {
@@ -73,9 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentClinic(clinic);
       try {
         const staffList = await authApi.getStaffForClinic(clinic.id);
-        setClinicStaff(staffList.length > 0 ? staffList : (FALLBACK_STAFF[clinic.id] || []));
+        setClinicStaff(staffList || []);
       } catch {
-        setClinicStaff(FALLBACK_STAFF[clinic.id] || []);
+        setClinicStaff([]);
       }
     }
   }, [clinics]);

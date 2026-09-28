@@ -259,83 +259,10 @@ async function seedDefaultTenantsAndStaff(client: pg.PoolClient) {
         86,
       ]);
 
-      // Dynamic salts for initial seed accounts
-      const priyaSalt = generateSalt();
-      const sunitaSalt = generateSalt();
-      const rajivSalt = generateSalt();
-      const anjaliSalt = generateSalt();
-
-      // Seed Staff for Clinic 1
-      await client.query(`
-        INSERT INTO staff_users (id, name, title, role, clinic_id, clinic_name, avatar_url, initials, salt, password_hash, pin_hash, is_active, assigned_beats)
-        VALUES 
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13),
-        ($14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26),
-        ($27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
-        ON CONFLICT (id) DO UPDATE SET
-          password_hash = EXCLUDED.password_hash;
-      `, [
-        // Priya
-        'PHM-PRIYA-71', 'Sister Priya Sharma', 'Public Health Midwife (Lead)', 'phm_lead',
-        'clinic-4b-rampur', 'Primary Health Post 4B',
-        'https://images.unsplash.com/photo-1594824813501-4835002b1f3c?w=120&auto=format&fit=crop&q=80',
-        'PS', priyaSalt, hashPassword('Priya@Materna2026!', priyaSalt), hashPin('1234', priyaSalt), true,
-        JSON.stringify(['Rampur Sector 1', 'Rampur Sector 2', 'Rampur Sector 3']),
-        
-        // Sunita
-        'PHM-SUNITA-02', 'Sister Sunita Bai', 'Public Health Midwife', 'phm',
-        'clinic-4b-rampur', 'Primary Health Post 4B',
-        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-        'SB', sunitaSalt, hashPassword('Sunita@Care2026!', sunitaSalt), hashPin('5678', sunitaSalt), true,
-        JSON.stringify(['Rampur Sector 4', 'Rampur Sector 5']),
-
-        // Dr. Rajiv
-        'DOC-RAJIV-01', 'Dr. Rajiv Sen', 'MOH Medical Officer', 'doctor',
-        'clinic-4b-rampur', 'Primary Health Post 4B',
-        'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=120&auto=format&fit=crop&q=80',
-        'RS', rajivSalt, hashPassword('DrRajiv@MOH2026!', rajivSalt), hashPin('9900', rajivSalt), true,
-        JSON.stringify([]),
-      ]);
-
-      // Seed Staff for Clinic 2
-      await client.query(`
-        INSERT INTO staff_users (id, name, title, role, clinic_id, clinic_name, avatar_url, initials, salt, password_hash, pin_hash, is_active, assigned_beats)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        ON CONFLICT (id) DO UPDATE SET
-          password_hash = EXCLUDED.password_hash;
-      `, [
-        'PHM-ANJALI-14', 'Sister Anjali Perera', 'Public Health Midwife (Lead)', 'phm_lead',
-        'clinic-02-kandy', 'Sub-Center Kandy Rural',
-        'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=120&auto=format&fit=crop&q=80',
-        'AP', anjaliSalt, hashPassword('Anjali@Kandy2026!', anjaliSalt), hashPin('2468', anjaliSalt), true,
-        JSON.stringify(['Kandy Sector 1', 'Kandy Sector 2']),
-      ]);
-
-      console.log('✓ Central PostgreSQL database successfully seeded with clinic tenants and staff users.');
-    } else {
-      // Ensure any existing staff members have dynamic salts & password hashes populated
-      const staffRes = await client.query('SELECT id, salt, password_hash FROM staff_users');
-      for (const row of staffRes.rows) {
-        let userSalt = row.salt;
-        if (!userSalt) {
-          userSalt = generateSalt();
-          await client.query('UPDATE staff_users SET salt = $1 WHERE id = $2', [userSalt, row.id]);
-        }
-
-        if (!row.password_hash) {
-          let defaultPw = 'Priya@Materna2026!';
-          if (row.id === 'PHM-SUNITA-02') defaultPw = 'Sunita@Care2026!';
-          if (row.id === 'DOC-RAJIV-01') defaultPw = 'DrRajiv@MOH2026!';
-          if (row.id === 'PHM-ANJALI-14') defaultPw = 'Anjali@Kandy2026!';
-          await client.query(
-            'UPDATE staff_users SET password_hash = $1 WHERE id = $2',
-            [hashPassword(defaultPw, userSalt), row.id]
-          );
-        }
-      }
+      console.log('✓ Central PostgreSQL database successfully initialized.');
     }
   } catch (err) {
-    console.error('Failed to seed default tenants & staff in PostgreSQL:', err);
+    console.error('Failed to initialize default schema in PostgreSQL:', err);
   }
 }
 

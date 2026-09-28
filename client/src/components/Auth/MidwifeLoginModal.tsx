@@ -10,16 +10,8 @@ import {
   Eye, 
   EyeOff, 
   KeyRound, 
-  LogIn, 
-  Sparkles 
+  LogIn 
 } from 'lucide-react';
-
-const DEFAULT_PASSWORDS: Record<string, string> = {
-  'PHM-PRIYA-71': 'Priya@Materna2026!',
-  'PHM-SUNITA-02': 'Sunita@Care2026!',
-  'DOC-RAJIV-01': 'DrRajiv@MOH2026!',
-  'PHM-ANJALI-14': 'Anjali@Kandy2026!',
-};
 
 export const MidwifeLoginModal: React.FC = () => {
   const { 
@@ -48,6 +40,8 @@ export const MidwifeLoginModal: React.FC = () => {
       setSelectedStaff(currentUser);
     } else if (clinicStaff.length > 0 && (!selectedStaff || !clinicStaff.some(s => s.id === selectedStaff.id))) {
       setSelectedStaff(clinicStaff[0]);
+    } else if (clinicStaff.length === 0) {
+      setSelectedStaff(null);
     }
   }, [clinicStaff, isLocked, currentUser, selectedStaff]);
 
@@ -72,12 +66,6 @@ export const MidwifeLoginModal: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const currentDefaultPassword = selectedStaff?.id ? DEFAULT_PASSWORDS[selectedStaff.id] || 'Priya@Materna2026!' : 'Priya@Materna2026!';
-
-  const handleQuickFill = () => {
-    setPassword(currentDefaultPassword);
   };
 
   return (
@@ -206,66 +194,62 @@ export const MidwifeLoginModal: React.FC = () => {
               <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider">
                 Select Midwife / Staff Account:
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {clinicStaff.map((staff) => {
-                  const isSelected = selectedStaff?.id === staff.id;
-                  return (
-                    <button
-                      key={staff.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedStaff(staff);
-                        setPassword('');
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-full ${
-                        isSelected
-                          ? 'border-[#006194] bg-[#f0f9ff] ring-2 ring-[#006194]/20 shadow-xs'
-                          : 'border-[#e2e8f0] bg-white hover:bg-[#f8fafc] hover:border-[#cbd5e1]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="relative">
-                          <img
-                            src={staff.avatarUrl || 'https://images.unsplash.com/photo-1594824813501-4835002b1f3c?w=120&auto=format&fit=crop&q=80'}
-                            alt={staff.name}
-                            className="w-9 h-9 rounded-full object-cover border border-[#cbd5e1]"
-                          />
-                          {isSelected && (
-                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#006194] text-white rounded-full flex items-center justify-center text-[9px] font-bold">
-                              ✓
-                            </div>
-                          )}
+              {clinicStaff.length === 0 ? (
+                <div className="bg-[#f8fafc] border border-dashed border-[#cbd5e1] p-4 rounded-xl text-center text-xs text-[#64748b]">
+                  <p className="font-semibold text-[#334155]">No staff members found for this clinic.</p>
+                  <p className="mt-1 text-[11px]">Please add staff accounts in your cloud database.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {clinicStaff.map((staff) => {
+                    const isSelected = selectedStaff?.id === staff.id;
+                    return (
+                      <button
+                        key={staff.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStaff(staff);
+                          setPassword('');
+                        }}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-full ${
+                          isSelected
+                            ? 'border-[#006194] bg-[#f0f9ff] ring-2 ring-[#006194]/20 shadow-xs'
+                            : 'border-[#e2e8f0] bg-white hover:bg-[#f8fafc] hover:border-[#cbd5e1]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="relative">
+                            <img
+                              src={staff.avatarUrl || 'https://images.unsplash.com/photo-1594824813501-4835002b1f3c?w=120&auto=format&fit=crop&q=80'}
+                              alt={staff.name}
+                              className="w-9 h-9 rounded-full object-cover border border-[#cbd5e1]"
+                            />
+                            {isSelected && (
+                              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#006194] text-white rounded-full flex items-center justify-center text-[9px] font-bold">
+                                ✓
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-bold text-[#0f172a] truncate">{staff.name}</div>
+                            <div className="text-[10px] text-[#64748b] truncate">{staff.title}</div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-[#0f172a] truncate">{staff.name}</div>
-                          <div className="text-[10px] text-[#64748b] truncate">{staff.title}</div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {/* Secure Web Password Input Form */}
           <form onSubmit={handleSubmit} className="space-y-4 pt-1">
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-[#006194]" />
-                  <span>Account Password</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleQuickFill}
-                  className="text-[11px] text-[#006194] hover:text-[#004f7b] font-medium flex items-center gap-1 cursor-pointer"
-                  title="Click to autofill default password"
-                >
-                  <Sparkles className="w-3 h-3 text-[#0284c7]" />
-                  <span>Use Default Password</span>
-                </button>
-              </div>
+              <label className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-[#006194]" />
+                <span>Account Password</span>
+              </label>
 
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94a3b8]">
@@ -276,9 +260,10 @@ export const MidwifeLoginModal: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter secure password..."
+                  disabled={!selectedStaff}
                   autoFocus
                   required
-                  className="w-full pl-10 pr-11 py-2.5 text-sm bg-white border border-[#cbd5e1] rounded-xl text-[#0f172a] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#006194]/20 focus:border-[#006194] transition-all"
+                  className="w-full pl-10 pr-11 py-2.5 text-sm bg-white border border-[#cbd5e1] rounded-xl text-[#0f172a] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#006194]/20 focus:border-[#006194] transition-all disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
                 <button
                   type="button"
@@ -294,9 +279,9 @@ export const MidwifeLoginModal: React.FC = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitting || !password.trim()}
+              disabled={isSubmitting || !password.trim() || !selectedStaff}
               className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-sm ${
-                isSubmitting || !password.trim()
+                isSubmitting || !password.trim() || !selectedStaff
                   ? 'bg-[#94a3b8] cursor-not-allowed'
                   : 'bg-[#006194] hover:bg-[#004f7b] active:scale-[0.99] cursor-pointer shadow-md'
               }`}
@@ -306,32 +291,19 @@ export const MidwifeLoginModal: React.FC = () => {
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Verifying Credentials...</span>
                 </>
+              ) : isLocked ? (
+                <>
+                  <Lock className="w-4 h-4" />
+                  <span>Unlock Midwife Station</span>
+                </>
               ) : (
                 <>
                   <LogIn className="w-4 h-4" />
-                  <span>{isLocked ? 'Unlock Midwife Station' : 'Sign In to MaternaVault'}</span>
+                  <span>Sign In to MaternaVault</span>
                 </>
               )}
             </button>
           </form>
-
-          {/* Quick Testing Password Hint Pill */}
-          <div className="p-3 bg-[#f0f9ff] border border-[#bae6fd] rounded-xl flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="w-4 h-4 text-[#0284c7] shrink-0" />
-              <div className="text-[11.5px] text-[#0369a1] truncate">
-                Default password for <strong>{selectedStaff?.name || 'Sister Priya'}</strong>:
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickFill}
-              className="shrink-0 bg-white hover:bg-[#e0f2fe] border border-[#7dd3fc] text-[#0369a1] text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-              title="Click to copy into password input"
-            >
-              {currentDefaultPassword}
-            </button>
-          </div>
 
           {/* Footer Security Badge */}
           <div className="pt-2 border-t border-[#f1f5f9] flex items-center justify-between text-[10.5px] text-[#64748b]">
