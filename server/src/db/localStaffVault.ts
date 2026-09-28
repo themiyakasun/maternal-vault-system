@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import type { StaffUser } from '../types/auth.js';
+import type { StaffUser, Clinic } from '../types/auth.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const VAULT_FILE = path.join(DATA_DIR, 'staff_vault_encrypted.db');
@@ -20,6 +20,7 @@ interface EncryptedVaultPayload {
 }
 
 interface VaultData {
+  tenants: Omit<Clinic, 'staff'>[];
   staffByClinic: Record<string, StaffUser[]>;
   offlineAuditQueue: Array<{
     staffId: string;
@@ -34,6 +35,7 @@ interface VaultData {
 
 // In-Memory cache of decrypted staff vault
 let localVaultCache: VaultData = {
+  tenants: [],
   staffByClinic: {},
   offlineAuditQueue: [],
 };
@@ -79,6 +81,7 @@ function encryptAndSaveVault(data: VaultData): void {
 
 function getEmptyVault(): VaultData {
   return {
+    tenants: [],
     staffByClinic: {},
     offlineAuditQueue: [],
   };
@@ -128,6 +131,21 @@ function decryptAndLoadVault(): VaultData {
 localVaultCache = decryptAndLoadVault();
 
 export const localStaffVault = {
+  /**
+   * Save / cache tenant clinics list into local encrypted vault.
+   */
+  saveTenants(tenants: Omit<Clinic, 'staff'>[]): void {
+    localVaultCache.tenants = tenants;
+    encryptAndSaveVault(localVaultCache);
+  },
+
+  /**
+   * Get cached tenant clinics list from local encrypted vault.
+   */
+  getTenants(): Omit<Clinic, 'staff'>[] {
+    return localVaultCache.tenants || [];
+  },
+
   /**
    * Save / replace the staff list for a clinic into local encrypted vault.
    */

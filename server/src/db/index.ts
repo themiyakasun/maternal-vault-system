@@ -205,64 +205,21 @@ export async function initDatabase() {
       }
     }
 
-    // 5. Seed default tenants & staff if empty or update passwords
-    await seedDefaultTenantsAndStaff(client);
-
+    // 5. Query and sync tenants and staff from cloud PostgreSQL into local encrypted vault
     client.release();
+    try {
+      const { tenantStore } = await import('./tenantStore.js');
+      const loadedTenants = await tenantStore.getClinics();
+      console.log(`✓ Synchronized ${loadedTenants.length} clinic tenant(s) and staff credentials from cloud DB.`);
+    } catch (syncErr) {
+      console.warn('Could not sync initial tenants from cloud DB:', (syncErr as Error).message);
+    }
   } catch (err) {
     console.warn(
       '⚠️  PostgreSQL connection not established. Operating in resilient In-Memory RAM DB fallback mode.',
       (err as Error).message,
     );
     isDatabaseConnected = false;
-  }
-}
-
-async function seedDefaultTenantsAndStaff(client: pg.PoolClient) {
-  try {
-    // Check if tenants exist
-    const tenantsRes = await client.query('SELECT COUNT(*) FROM tenants');
-    const count = parseInt(tenantsRes.rows[0].count, 10);
-
-    if (count === 0) {
-      console.log('🌱 Seeding initial clinics & staff into central PostgreSQL...');
-
-      // Seed Clinic 1
-      await client.query(`
-        INSERT INTO tenants (id, code, name, division, district, moh_area, station_key, active_mothers_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO NOTHING;
-      `, [
-        'clinic-4b-rampur',
-        'PHP-4B',
-        'Primary Health Post 4B',
-        'Rampur Division',
-        'Rampur District',
-        'MOH Rampur Central',
-        'MATERNA_VAULT_SECURE_PHM_MUM_71_SECRET_KEY',
-        142,
-      ]);
-
-      // Seed Clinic 2
-      await client.query(`
-        INSERT INTO tenants (id, code, name, division, district, moh_area, station_key, active_mothers_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO NOTHING;
-      `, [
-        'clinic-02-kandy',
-        'SC-KND-02',
-        'Sub-Center Kandy Rural',
-        'Kandy Division',
-        'Kandy District',
-        'MOH Kandy North',
-        'MATERNA_VAULT_SECURE_KANDY_STATION_KEY',
-        86,
-      ]);
-
-      console.log('✓ Central PostgreSQL database successfully initialized.');
-    }
-  } catch (err) {
-    console.error('Failed to initialize default schema in PostgreSQL:', err);
   }
 }
 

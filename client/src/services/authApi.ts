@@ -2,27 +2,8 @@ import type { Clinic, StaffUser, LoginResponse } from '../types/auth';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-// Fallback seed directory for 100% pure client-side offline standalone execution
-export const FALLBACK_CLINICS: Clinic[] = [
-  {
-    id: 'clinic-4b-rampur',
-    code: 'PHP-4B',
-    name: 'Primary Health Post 4B',
-    division: 'Rampur Division',
-    district: 'Rampur District',
-    mohArea: 'MOH Rampur Central',
-    activeMothersCount: 142,
-  },
-  {
-    id: 'clinic-02-kandy',
-    code: 'SC-KND-02',
-    name: 'Sub-Center Kandy Rural',
-    division: 'Kandy Division',
-    district: 'Kandy District',
-    mohArea: 'MOH Kandy North',
-    activeMothersCount: 86,
-  },
-];
+// Fallback clinics array (empty by default; populated from backend/cloud DB)
+export const FALLBACK_CLINICS: Clinic[] = [];
 
 export const FALLBACK_STAFF: Record<string, (StaffUser & { defaultPassword?: string; defaultPin?: string })[]> = {};
 
@@ -42,10 +23,10 @@ export const authApi = {
         }
       }
     } catch {
-      // Backend offline - use in-memory fallback
+      // Backend offline
     }
 
-    return FALLBACK_CLINICS;
+    return [];
   },
 
   /**

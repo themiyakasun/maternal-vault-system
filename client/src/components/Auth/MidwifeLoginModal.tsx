@@ -110,13 +110,13 @@ export const MidwifeLoginModal: React.FC = () => {
                   className="flex items-center gap-1.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                 >
                   <Building2 className="w-3.5 h-3.5 text-[#38bdf8]" />
-                  <span className="font-bold">{currentClinic?.name || 'Primary Health Post 4B'}</span>
+                  <span className="font-bold">{currentClinic?.name || (clinics.length === 0 ? 'No Clinic Configured' : 'Select Clinic')}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-white/70" />
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5 text-white/90 bg-white/10 px-2.5 py-1 rounded-lg">
                   <Building2 className="w-3.5 h-3.5 text-[#38bdf8]" />
-                  <span className="font-bold">{currentClinic?.name}</span>
+                  <span className="font-bold">{currentClinic?.name || 'No Clinic Configured'}</span>
                 </div>
               )}
 
@@ -194,9 +194,14 @@ export const MidwifeLoginModal: React.FC = () => {
               <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider">
                 Select Midwife / Staff Account:
               </label>
-              {clinicStaff.length === 0 ? (
+              {clinics.length === 0 ? (
                 <div className="bg-[#f8fafc] border border-dashed border-[#cbd5e1] p-4 rounded-xl text-center text-xs text-[#64748b]">
-                  <p className="font-semibold text-[#334155]">No staff members found for this clinic.</p>
+                  <p className="font-semibold text-[#334155]">No clinic tenants configured on this station.</p>
+                  <p className="mt-1 text-[11px]">Please add clinic tenants and staff in your cloud PostgreSQL database.</p>
+                </div>
+              ) : clinicStaff.length === 0 ? (
+                <div className="bg-[#f8fafc] border border-dashed border-[#cbd5e1] p-4 rounded-xl text-center text-xs text-[#64748b]">
+                  <p className="font-semibold text-[#334155]">No staff members found for {currentClinic?.name || 'this clinic'}.</p>
                   <p className="mt-1 text-[11px]">Please add staff accounts in your cloud database.</p>
                 </div>
               ) : (

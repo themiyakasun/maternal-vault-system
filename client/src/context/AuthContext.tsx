@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Clinic, StaffUser, LoginResponse } from '../types/auth';
-import { authApi, FALLBACK_CLINICS } from '../services/authApi';
+import { authApi } from '../services/authApi';
 
 interface AuthContextType {
   currentUser: StaffUser | null;
@@ -23,7 +23,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [currentClinic, setCurrentClinic] = useState<Clinic | null>(null);
-  const [clinics, setClinics] = useState<Clinic[]>(FALLBACK_CLINICS);
+  const [clinics, setClinics] = useState<Clinic[]>([]);
   const [clinicStaff, setClinicStaff] = useState<StaffUser[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLocked, setIsLocked] = useState<boolean>(false);
@@ -49,11 +49,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const staffList = await authApi.getStaffForClinic(session.clinic.id);
           setClinicStaff(staffList || []);
         } else {
-          // Default to first clinic in list (unauthenticated state)
-          const defaultClinic = fetchedClinics[0] || FALLBACK_CLINICS[0];
-          setCurrentClinic(defaultClinic);
-          const staffList = await authApi.getStaffForClinic(defaultClinic.id);
-          setClinicStaff(staffList || []);
+          // Unauthenticated state: select first fetched clinic if available
+          if (fetchedClinics.length > 0) {
+            const defaultClinic = fetchedClinics[0];
+            setCurrentClinic(defaultClinic);
+            const staffList = await authApi.getStaffForClinic(defaultClinic.id);
+            setClinicStaff(staffList || []);
+          } else {
+            setCurrentClinic(null);
+            setClinicStaff([]);
+          }
           setIsAuthenticated(false);
         }
       } catch (err) {
@@ -68,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Switch clinic station
   const switchClinic = useCallback(async (clinicId: string) => {
-    const clinic = clinics.find((c) => c.id === clinicId) || FALLBACK_CLINICS.find((c) => c.id === clinicId) || null;
+    const clinic = clinics.find((c) => c.id === clinicId) || null;
     if (clinic) {
       setCurrentClinic(clinic);
       try {

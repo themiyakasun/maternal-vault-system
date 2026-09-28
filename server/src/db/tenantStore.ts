@@ -8,30 +8,6 @@ const TOKEN_SECRET = process.env.OFFLINE_TOKEN_SECRET || 'MATERNA_VAULT_OFFLINE_
 
 export { generateSalt, hashPassword, hashPin };
 
-// Pre-seeded Multi-Clinic Hierarchy (Fallback metadata)
-const defaultClinicsMetadata: Omit<Clinic, 'staff'>[] = [
-  {
-    id: 'clinic-4b-rampur',
-    code: 'PHP-4B',
-    name: 'Primary Health Post 4B',
-    division: 'Rampur Division',
-    district: 'Rampur District',
-    mohArea: 'MOH Rampur Central',
-    stationKey: 'MATERNA_VAULT_SECURE_PHM_MUM_71_SECRET_KEY',
-    activeMothersCount: 142,
-  },
-  {
-    id: 'clinic-02-kandy',
-    code: 'SC-KND-02',
-    name: 'Sub-Center Kandy Rural',
-    division: 'Kandy Division',
-    district: 'Kandy District',
-    mohArea: 'MOH Kandy North',
-    stationKey: 'MATERNA_VAULT_SECURE_KANDY_STATION_KEY',
-    activeMothersCount: 86,
-  },
-];
-
 async function recordAuditLog(
   staffId: string,
   clinicId: string,
@@ -73,6 +49,7 @@ export interface CreateStaffInput {
 class TenantStore {
   /**
    * List all clinics (without exposing passwords, hashes, and salts)
+   * Fetches from cloud PostgreSQL and caches into local encrypted vault.
    */
   public async getClinics(): Promise<Omit<Clinic, 'staff'>[]> {
     try {
@@ -85,13 +62,60 @@ class TenantStore {
       `);
 
       if (res.rows.length > 0) {
+        // Cache tenants into local encrypted vault
+        localStaffVault.saveTenants(res.rows);
+
+        // Opportunistically sync staff credentials for all active clinics
+        for (const tenant of res.rows) {
+          await this.syncStaffFromCloud(tenant.id);
+        }
+
         return res.rows;
       }
     } catch (err) {
-      console.warn('⚠️  Failed to fetch tenants from PostgreSQL, falling back to cached seed:', (err as Error).message);
+      console.warn('⚠️  Failed to fetch tenants from PostgreSQL, falling back to local encrypted vault:', (err as Error).message);
     }
 
-    return defaultClinicsMetadata;
+    // Offline Fallback: Return cached tenants from Local Encrypted Staff Vault
+    return localStaffVault.getTenants();
+  }
+
+  /**
+   * Fetch and cache staff credentials for a specific clinic from cloud DB.
+   */
+  public async syncStaffFromCloud(clinicId: string): Promise<void> {
+    try {
+      const res = await pool.query(
+        `SELECT id, name, title, role, clinic_id as "clinicId", 
+                clinic_name as "clinicName", avatar_url as "avatarUrl", 
+                initials, salt, password_hash as "passwordHash", pin_hash as "pinHash",
+                is_active as "isActive", assigned_beats as "assignedBeats"
+         FROM staff_users 
+         WHERE clinic_id = $1 AND is_active = TRUE
+         ORDER BY name ASC`,
+        [clinicId]
+      );
+
+      if (res.rows.length > 0) {
+        localStaffVault.saveStaffForClinic(clinicId, res.rows);
+      }
+    } catch (err) {
+      // Cloud database unreachable, keep existing cached staff
+    }
+  }
+
+  /**
+   * Save or update a clinic in the local encrypted vault cache (e.g. for testing or local creation)
+   */
+  public saveTenantToLocal(tenant: Omit<Clinic, 'staff'>): void {
+    const list = localStaffVault.getTenants();
+    const idx = list.findIndex((c) => c.id === tenant.id);
+    if (idx >= 0) {
+      list[idx] = tenant;
+    } else {
+      list.push(tenant);
+    }
+    localStaffVault.saveTenants(list);
   }
 
   /**
@@ -114,11 +138,11 @@ class TenantStore {
         tenantInfo = tenantRes.rows[0];
       }
     } catch (err) {
-      console.warn(`⚠️  Failed to fetch clinic ${clinicId} from PostgreSQL, falling back to cache`);
+      console.warn(`⚠️  Failed to fetch clinic ${clinicId} from PostgreSQL, falling back to local encrypted vault`);
     }
 
     if (!tenantInfo) {
-      tenantInfo = defaultClinicsMetadata.find((c) => c.id === clinicId);
+      tenantInfo = localStaffVault.getTenants().find((c) => c.id === clinicId);
     }
 
     if (!tenantInfo) return undefined;
@@ -338,7 +362,7 @@ class TenantStore {
 
     // 2. Offline Fallback to Local Encrypted Staff Vault if DB is unreachable or returned no rows
     if (!staffMember || !clinic) {
-      clinic = defaultClinicsMetadata.find((c) => c.id === clinicId) || null;
+      clinic = (localStaffVault.getTenants().find((c) => c.id === clinicId) as any) || null;
       if (!clinic) {
         await recordAuditLog(staffId, clinicId, 'login_password', 'failed_not_found', ipAddress, { reason: 'Clinic not found' });
         return { success: false, message: 'Clinic station not recognized.' };

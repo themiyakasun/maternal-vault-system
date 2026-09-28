@@ -17,6 +17,18 @@ describe('6. Full End-to-End API Integration Testing', () => {
     // Initialize Local AES-256-GCM Encrypted DB for edge operations
     localEncryptedDb.init();
 
+    // Register a test clinic tenant
+    tenantStore.saveTenantToLocal({
+      id: 'clinic-4b-rampur',
+      code: 'PHP-4B',
+      name: 'Primary Health Post 4B',
+      division: 'Rampur Division',
+      district: 'Rampur District',
+      mohArea: 'MOH Rampur Central',
+      stationKey: 'MATERNA_VAULT_SECURE_PHM_MUM_71_SECRET_KEY',
+      activeMothersCount: 142,
+    });
+
     // Register a test staff account for API authentication testing
     await tenantStore.createStaffMember({
       id: 'PHM-PRIYA-71',

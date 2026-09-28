@@ -5,6 +5,17 @@ import { hashPassword, generateSalt } from '../src/db/index.js';
 
 describe('1. Authentication & Security Engine', () => {
   before(async () => {
+    tenantStore.saveTenantToLocal({
+      id: 'clinic-4b-rampur',
+      code: 'PHP-4B',
+      name: 'Primary Health Post 4B',
+      division: 'Rampur Division',
+      district: 'Rampur District',
+      mohArea: 'MOH Rampur Central',
+      stationKey: 'MATERNA_VAULT_SECURE_PHM_MUM_71_SECRET_KEY',
+      activeMothersCount: 142,
+    });
+
     await tenantStore.createStaffMember({
       id: 'PHM-PRIYA-71',
       name: 'Sister Priya Sharma',
