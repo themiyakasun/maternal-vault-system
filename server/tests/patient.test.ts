@@ -105,6 +105,19 @@ describe('2. Patient Records & Encrypted Database', () => {
     assert.ok(typeof stats.lowRiskCount === 'number');
   });
 
+  it('should find a patient by NIC number and prevent duplicate NIC lookup', () => {
+    localEncryptedDb.update(testPatientId, { nicNo: '199754301290' });
+    const found = localEncryptedDb.getByNic('199754301290');
+    assert.ok(found, 'Should find patient by exact NIC');
+    assert.strictEqual(found?.id, testPatientId);
+
+    const foundWhitespace = localEncryptedDb.getByNic(' 199754301290 ');
+    assert.ok(foundWhitespace, 'Should find patient with whitespace trimmed');
+
+    const notFound = localEncryptedDb.getByNic('000000000000');
+    assert.strictEqual(notFound, undefined, 'Should return undefined for unknown NIC');
+  });
+
   it('should delete a patient record cleanly', () => {
     const deleted = localEncryptedDb.delete(testPatientId);
     assert.strictEqual(deleted, true);

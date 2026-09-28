@@ -444,6 +444,19 @@ function DashboardContent() {
 
   const handleAddPatient = async (newPatient: Patient) => {
     const cid = currentClinic?.id || 'clinic-4b-rampur';
+
+    // 0. Check duplicate NIC in local state
+    if (newPatient.nicNo && newPatient.nicNo.trim()) {
+      const cleanNic = newPatient.nicNo.trim().toUpperCase();
+      const duplicate = patients.find(
+        (p) => p.nicNo && p.nicNo.trim().toUpperCase() === cleanNic && p.id !== newPatient.id
+      );
+      if (duplicate) {
+        showToast(`Cannot register: Mother with NIC "${cleanNic}" is already registered (${duplicate.name} - ${duplicate.id}).`);
+        return;
+      }
+    }
+
     const offlinePatient: Patient = {
       ...newPatient,
       syncStatus: 'updated-local',
@@ -476,6 +489,23 @@ function DashboardContent() {
     // 3. Persist to server AES-256-GCM encrypted database & PostgreSQL if online
     try {
       const res = await patientApi.createPatient(offlinePatient, cid);
+      if (res?.success === false && res?.code === 'DUPLICATE_NIC') {
+        // Rollback optimistic addition on duplicate rejection
+        setPatients((prev) => {
+          const rolledBack = prev.filter((p) => p.id !== offlinePatient.id);
+          offlineStorage.saveCachedPatients(cid, rolledBack);
+          return rolledBack;
+        });
+        const action = offlineStorage.getOfflineQueue(cid).find(
+          (q) => q.patientId === offlinePatient.id && q.type === 'CREATE_PATIENT'
+        );
+        if (action) {
+          offlineStorage.removeMutation(action.id, cid);
+        }
+        showToast(res.message || 'Cannot register: Mother with this NIC is already registered.');
+        return;
+      }
+
       if (res?.success && res?.data) {
         const serverPatient: Patient = res.data;
         const action = offlineStorage.getOfflineQueue(cid).find(
@@ -1001,6 +1031,7 @@ function DashboardContent() {
         isOpen={isIntakeOpen}
         onClose={() => setIsIntakeOpen(false)}
         onAddPatient={handleAddPatient}
+        existingPatients={patients}
       />
 
       <ClinicalPathwayModal

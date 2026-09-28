@@ -9,12 +9,16 @@ import {
   getPatientQRCode,
   addPatientVisit,
   recalculatePatientRisk,
+  checkPatientNic,
 } from '../controllers/patientController.js';
 
 const router = Router();
 
 // GET summary stats (must come before /:id)
 router.get('/stats', getPatientStats);
+
+// Check duplicate NIC in local or cloud DB (must come before /:id)
+router.get('/check-nic', checkPatientNic);
 
 // List patients with query filtering
 router.get('/', getAllPatients);

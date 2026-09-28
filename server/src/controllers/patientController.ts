@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import zlib from 'zlib';
 import { localEncryptedDb } from '../db/localEncryptedDb.js';
 import { probePostgres, upsertToPostgres, deleteFromPostgres } from '../services/syncService.js';
+import { pool } from '../db/index.js';
 import { evaluatePatientRisk } from '../services/mlRiskService.js';
 import type { Patient, CreatePatientInput, UpdatePatientInput, ANCVisitInput } from '../types/patient.js';
 
@@ -92,6 +93,59 @@ export const createPatient = async (req: Request, res: Response) => {
     const newId = input.id ? normalizeId(input.id) : `#${Math.floor(1000 + Math.random() * 9000)}`;
     const tenantId = input.tenantId || (req.headers['x-tenant-id'] as string) || 'clinic-4b-rampur';
     const clinicId = input.clinicId || tenantId;
+
+    // Check duplicate NIC in both Local Encrypted DB and Cloud PostgreSQL
+    if (input.nicNo && input.nicNo.trim()) {
+      const cleanNic = input.nicNo.trim().toUpperCase();
+
+      // 1. Check Local Encrypted DB
+      const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+      if (localDup && (!input.id || localDup.id !== normalizeId(input.id))) {
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_NIC',
+          message: `Mother with NIC "${cleanNic}" is already registered (${localDup.name} - ${localDup.id}). Duplicate registrations are not permitted.`,
+          data: {
+            existingPatientId: localDup.id,
+            existingName: localDup.name,
+            nicNo: cleanNic,
+            source: 'local',
+          },
+        });
+      }
+
+      // 2. Check PostgreSQL Cloud DB if online
+      try {
+        const isOnline = await probePostgres();
+        if (isOnline) {
+          const client = await pool.connect();
+          const pgRes = await client.query(
+            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) LIMIT 1`,
+            [cleanNic, tenantId]
+          );
+          client.release();
+          if (pgRes.rows.length > 0) {
+            const existing = pgRes.rows[0];
+            if (!input.id || existing.id !== normalizeId(input.id)) {
+              return res.status(409).json({
+                success: false,
+                code: 'DUPLICATE_NIC',
+                message: `Mother with NIC "${cleanNic}" is already registered in cloud database (${existing.name} - ${existing.id}). Duplicate registrations are not permitted.`,
+                data: {
+                  existingPatientId: existing.id,
+                  existingName: existing.name,
+                  nicNo: cleanNic,
+                  source: 'cloud',
+                },
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('PostgreSQL duplicate NIC check warning:', err);
+      }
+    }
+
     const weeks = input.gestationalWeeks || 12;
     const days = input.gestationalDays || 0;
     const trimester = weeks > 27 ? 3 : weeks > 13 ? 2 : 1;
@@ -247,6 +301,43 @@ export const updatePatient = async (req: Request, res: Response) => {
     const existing = localEncryptedDb.getById(id);
     if (!existing) {
       return res.status(404).json({ success: false, message: `Patient with ID ${id} not found` });
+    }
+
+    // If NIC is being updated, verify uniqueness
+    if (updates.nicNo && updates.nicNo.trim()) {
+      const cleanNic = updates.nicNo.trim().toUpperCase();
+      const tenantId = updates.tenantId || existing.tenantId || existing.clinicId;
+
+      const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+      if (localDup && localDup.id !== id) {
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_NIC',
+          message: `Cannot update: Mother with NIC "${cleanNic}" is already registered (${localDup.name} - ${localDup.id}).`,
+        });
+      }
+
+      try {
+        const isOnline = await probePostgres();
+        if (isOnline) {
+          const client = await pool.connect();
+          const pgRes = await client.query(
+            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) AND id != $3 LIMIT 1`,
+            [cleanNic, tenantId, id]
+          );
+          client.release();
+          if (pgRes.rows.length > 0) {
+            const row = pgRes.rows[0];
+            return res.status(409).json({
+              success: false,
+              code: 'DUPLICATE_NIC',
+              message: `Cannot update: Mother with NIC "${cleanNic}" is already registered in cloud database (${row.name} - ${row.id}).`,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('PostgreSQL NIC update check warning:', err);
+      }
     }
 
     // Prepare merged updates
@@ -1326,6 +1417,76 @@ export const getPatientMobileView = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error rendering mobile pass:', error);
     return res.status(500).send('Error rendering mobile pass');
+  }
+};
+
+/**
+ * GET /api/patients/check-nic
+ * Check if an NIC number is already registered in local encrypted DB or cloud PostgreSQL
+ */
+export const checkPatientNic = async (req: Request, res: Response) => {
+  try {
+    const rawNic = req.query.nic as string;
+    const tenantId = (req.query.clinicId as string) || (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string) || undefined;
+    const excludeId = req.query.excludeId ? normalizeId(req.query.excludeId as string) : undefined;
+
+    if (!rawNic || !rawNic.trim()) {
+      return res.json({ success: true, exists: false });
+    }
+
+    const cleanNic = rawNic.trim().toUpperCase();
+
+    // 1. Check Local Encrypted DB
+    const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+    if (localDup && (!excludeId || localDup.id !== excludeId)) {
+      return res.json({
+        success: true,
+        exists: true,
+        source: 'local',
+        patient: {
+          id: localDup.id,
+          name: localDup.name,
+          nicNo: localDup.nicNo,
+          clinicId: localDup.tenantId || localDup.clinicId,
+        },
+      });
+    }
+
+    // 2. Check Cloud PostgreSQL
+    try {
+      const isOnline = await probePostgres();
+      if (isOnline) {
+        const client = await pool.connect();
+        const pgRes = await client.query(
+          `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) LIMIT 1`,
+          [cleanNic, tenantId]
+        );
+        client.release();
+        if (pgRes.rows.length > 0) {
+          const row = pgRes.rows[0];
+          if (!excludeId || row.id !== excludeId) {
+            return res.json({
+              success: true,
+              exists: true,
+              source: 'cloud',
+              patient: {
+                id: row.id,
+                name: row.name,
+                nicNo: row.nic_no,
+                clinicId: row.tenant_id,
+              },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('PostgreSQL NIC verification check warning:', err);
+    }
+
+    return res.json({ success: true, exists: false });
+  } catch (error) {
+    console.error('Error checking patient NIC:', error);
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
 

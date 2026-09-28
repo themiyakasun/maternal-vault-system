@@ -54,6 +54,17 @@ export const patientApi = {
     return res.json();
   },
 
+  // Check duplicate NIC against local and cloud databases
+  async checkNic(nic: string, clinicId?: string, excludeId?: string) {
+    const params = new URLSearchParams({ nic });
+    if (clinicId) params.append('clinicId', clinicId);
+    if (excludeId) params.append('excludeId', excludeId);
+    const res = await fetch(`${API_BASE}/patients/check-nic?${params.toString()}`, {
+      credentials: 'include',
+    });
+    return res.json();
+  },
+
   // Create new patient
   async createPatient(data: Partial<Patient>, tenantId?: string) {
     const tid = tenantId || data.tenantId || data.clinicId || '';

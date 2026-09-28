@@ -202,6 +202,22 @@ export const localEncryptedDb = {
     return localPatientsCache.find(p => p.id === id);
   },
 
+  // Get single patient by NIC number (case-insensitive & trimmed)
+  getByNic(nic: string, tenantId?: string): Patient | undefined {
+    if (!nic) return undefined;
+    const clean = nic.trim().toUpperCase();
+    if (!clean) return undefined;
+    return localPatientsCache.find(p => {
+      if (!p.nicNo) return false;
+      const match = p.nicNo.trim().toUpperCase() === clean;
+      if (!match) return false;
+      if (tenantId && tenantId !== 'all') {
+        return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === tenantId;
+      }
+      return true;
+    });
+  },
+
   // Insert or upsert a patient
   insert(patient: Patient): Patient {
     const existingIdx = localPatientsCache.findIndex(p => p.id === patient.id);
