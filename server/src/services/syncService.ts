@@ -1,5 +1,6 @@
 import { pool } from '../db/index.js';
 import { localEncryptedDb } from '../db/localEncryptedDb.js';
+import { tenantStore } from '../db/tenantStore.js';
 import type { Patient } from '../types/patient.js';
 
 export interface CentralDbStatus {
@@ -395,13 +396,17 @@ export function startBackgroundSyncWorker(intervalMs = 20000): void {
   if (syncWorkerTimer) clearInterval(syncWorkerTimer);
 
   syncWorkerTimer = setInterval(async () => {
-    const pending = localEncryptedDb.getPendingSync();
-    if (pending.length > 0) {
-      const online = await probePostgres();
-      if (online) {
+    const online = await probePostgres();
+    if (online) {
+      // 1. Push pending local patient records to PostgreSQL if any
+      const pending = localEncryptedDb.getPendingSync();
+      if (pending.length > 0) {
         console.log(`🔄 Network detected! Auto-syncing ${pending.length} pending local records to PostgreSQL...`);
         await syncLocalToPostgres();
       }
+
+      // 2. Automatically sync any new/updated clinics or staff credentials from PostgreSQL into local encrypted DB
+      await tenantStore.syncAllFromCloud();
     }
   }, intervalMs);
 

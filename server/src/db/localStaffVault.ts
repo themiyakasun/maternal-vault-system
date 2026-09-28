@@ -155,6 +155,14 @@ export const localStaffVault = {
   },
 
   /**
+   * Replace all staff members across all clinics in the local encrypted vault.
+   */
+  saveAllStaff(staffByClinic: Record<string, StaffUser[]>): void {
+    localVaultCache.staffByClinic = staffByClinic;
+    encryptAndSaveVault(localVaultCache);
+  },
+
+  /**
    * Add or update an individual staff member in the local encrypted vault.
    */
   upsertStaffUser(staff: StaffUser): void {

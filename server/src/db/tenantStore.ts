@@ -96,8 +96,52 @@ class TenantStore {
         [clinicId]
       );
 
-      if (res.rows.length > 0) {
+      if (res && Array.isArray(res.rows)) {
         localStaffVault.saveStaffForClinic(clinicId, res.rows);
+      }
+    } catch (err) {
+      // Cloud database unreachable, keep existing cached staff
+    }
+  }
+
+  /**
+   * Fully synchronize all tenants and all active staff credentials from PostgreSQL into local encrypted DB.
+   */
+  public async syncAllFromCloud(): Promise<void> {
+    try {
+      const res = await pool.query(`
+        SELECT id, code, name, division, district, 
+               moh_area as "mohArea", station_key as "stationKey", 
+               active_mothers_count as "activeMothersCount"
+        FROM tenants 
+        ORDER BY name ASC
+      `);
+
+      if (res && Array.isArray(res.rows)) {
+        localStaffVault.saveTenants(res.rows);
+
+        const staffRes = await pool.query(`
+          SELECT id, name, title, role, clinic_id as "clinicId", 
+                 clinic_name as "clinicName", avatar_url as "avatarUrl", 
+                 initials, salt, password_hash as "passwordHash", pin_hash as "pinHash",
+                 is_active as "isActive", assigned_beats as "assignedBeats"
+          FROM staff_users 
+          WHERE is_active = TRUE
+          ORDER BY name ASC
+        `);
+
+        const staffByClinic: Record<string, StaffUser[]> = {};
+        for (const tenant of res.rows) {
+          staffByClinic[tenant.id] = [];
+        }
+        for (const staff of staffRes.rows) {
+          if (!staffByClinic[staff.clinicId]) {
+            staffByClinic[staff.clinicId] = [];
+          }
+          staffByClinic[staff.clinicId].push(staff);
+        }
+
+        localStaffVault.saveAllStaff(staffByClinic);
       }
     } catch (err) {
       // Cloud database unreachable, keep existing cached staff
