@@ -60,7 +60,7 @@ export async function checkConnectionAndStatus(tenantId?: string): Promise<Centr
   const checkedAt = new Date().toISOString();
   const activeTenant = tenantId && tenantId !== 'all' ? tenantId : undefined;
   
-  const allLocal = localEncryptedDb.getAll(activeTenant).data;
+  const allLocal = localEncryptedDb.getAll({ tenantId: activeTenant, limit: 10000 }).data;
   const pendingLocal = localEncryptedDb.getPendingSync().filter(p => {
     if (!activeTenant) return true;
     return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === activeTenant;
@@ -449,7 +449,7 @@ export async function syncDownstreamFromPostgres(tenantId?: string): Promise<{ p
     }
 
     // 2. Reconcile deletions: remove local synced records that no longer exist in PostgreSQL for this tenant
-    const localList = localEncryptedDb.getAll(activeTenant).data;
+    const localList = localEncryptedDb.getAll({ tenantId: activeTenant, limit: 10000 }).data;
     for (const localP of localList) {
       if (localP.syncStatus === 'synced-p2p' && !remoteIdSet.has(localP.id)) {
         localEncryptedDb.deleteFromRemote(localP.id);

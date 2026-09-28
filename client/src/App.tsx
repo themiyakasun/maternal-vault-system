@@ -31,6 +31,7 @@ import { EmergencyEscalationWidget } from './components/PatientRecords/BottomWid
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MidwifeLoginModal } from './components/Auth/MidwifeLoginModal';
 import { patientApi } from './services/patientApi';
+import { offlineStorage } from './services/offlineStorage';
 import { formatDbDate } from './utils/dateUtils';
 import type { Patient, FilterTab, ANCVisitInput, ANCVisit } from './types/triage';
 import { 
@@ -57,51 +58,83 @@ function DashboardContent() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
-  // Load clinic patients dynamically from local AES-256 encrypted DB whenever the active clinic changes
+  // Load clinic patients with offline-first persistence & multi-device sync
   useEffect(() => {
     let isMounted = true;
     const cid = currentClinic?.id || 'clinic-4b-rampur';
 
-    // Fetch scoped patients with real-time multi-device synchronization
+    // 1. Instant load from local browser persistent cache (zero latency offline support)
+    const cachedPatients = offlineStorage.loadCachedPatients(cid);
+    if (cachedPatients.length > 0) {
+      setPatients(cachedPatients);
+      setSelectedPatientId(cachedPatients[0].id);
+    }
+
+    // 2. Fetch scoped patients with reliable offline replay & multi-device synchronization
     const fetchClinicPatients = async (silent = false) => {
       try {
         if (cid) {
+          // Replay any pending offline mutations if connection is available
+          await offlineStorage.flushOfflineQueue(cid, (updatedPatient) => {
+            if (updatedPatient && isMounted) {
+              setPatients((prev) => {
+                const updatedList = prev.map((p) => (p.id === updatedPatient.id ? updatedPatient : p));
+                offlineStorage.saveCachedPatients(cid, updatedList);
+                return updatedList;
+              });
+            }
+          });
+
           const res = await patientApi.getAllPatients(cid);
           if (isMounted && res?.data) {
             const serverList: Patient[] = res.data;
             setPatients((prev) => {
+              // Reconcile server data without losing un-synced offline records
+              const reconciled = offlineStorage.reconcilePatients(serverList, prev, cid);
+
               // Avoid re-rendering if data is identical
               if (
-                prev.length === serverList.length &&
-                prev.every((p, idx) => p.id === serverList[idx]?.id && p.updatedAt === serverList[idx]?.updatedAt)
+                prev.length === reconciled.length &&
+                prev.every(
+                  (p, idx) =>
+                    p.id === reconciled[idx]?.id &&
+                    (p.updatedAt || p.assessedTime) === (reconciled[idx]?.updatedAt || reconciled[idx]?.assessedTime) &&
+                    p.syncStatus === reconciled[idx]?.syncStatus
+                )
               ) {
                 return prev;
               }
-              return serverList;
+              return reconciled;
             });
 
             setSelectedPatientId((prev) => {
               if (prev && serverList.some((p) => p.id === prev)) {
                 return prev;
               }
-              return serverList.length > 0 ? serverList[0].id : '';
+              return serverList.length > 0 ? serverList[0].id : prev;
             });
             return;
           }
         }
       } catch (err) {
         if (!silent) {
-          console.warn('Local Encrypted Database API unreachable:', err);
+          console.warn('Backend server currently offline. Retaining local cached records:', err);
         }
       }
-
-      if (isMounted && !silent) {
-        setPatients([]);
-        setSelectedPatientId('');
-      }
+      // Note: On offline network error, NEVER wipe out patient state or reset selected patient!
     };
 
     fetchClinicPatients();
+
+    // Replay queue and reconcile whenever browser network state transitions to online
+    const handleNetworkOnline = async () => {
+      console.log('🌐 Network restored - Reconciling offline records with cloud database...');
+      setSyncToast('Network reconnected. Synchronizing offline records with cloud...');
+      setTimeout(() => setSyncToast(null), 4000);
+      await fetchClinicPatients(true);
+    };
+
+    window.addEventListener('online', handleNetworkOnline);
 
     // Real-Time Multi-Device Polling Interval (every 4 seconds)
     // Synchronizes changes across other tablets and the main PostgreSQL system
@@ -112,6 +145,7 @@ function DashboardContent() {
     return () => {
       isMounted = false;
       clearInterval(syncInterval);
+      window.removeEventListener('online', handleNetworkOnline);
     };
   }, [currentClinic?.id]);
 
@@ -204,10 +238,12 @@ function DashboardContent() {
   const handleConfirmDeletePatient = async (patientId: string) => {
     const targetPatient = patients.find((p) => p.id === patientId);
     const patientName = targetPatient?.name || patientId;
+    const cid = currentClinic?.id || 'clinic-4b-rampur';
 
-    // 1. Immediately update React memory state
+    // 1. Immediately update React memory state & browser persistent cache
     setPatients((prev) => {
       const updatedList = prev.filter((p) => p.id !== patientId);
+      offlineStorage.saveCachedPatients(cid, updatedList);
       return updatedList;
     });
 
@@ -233,38 +269,64 @@ function DashboardContent() {
       setSelectedVisitPatient(null);
     }
 
-    // 3. Remove from backend AES-256-GCM encrypted database & PostgreSQL
-    try {
-      const cid = currentClinic?.id || 'clinic-4b-rampur';
-      await patientApi.deletePatient(patientId, cid);
-    } catch (err) {
-      console.warn('Backend API delete error:', err);
-    }
+    // 3. Queue offline deletion in persistent queue
+    offlineStorage.enqueueMutation({
+      type: 'DELETE_PATIENT',
+      clinicId: cid,
+      patientId,
+      payload: { id: patientId },
+    });
 
     // 4. Close delete modal & notify user
     setIsDeleteModalOpen(false);
     setSelectedDeletePatient(null);
     showToast(`Mother ${patientName} (${patientId}) removed from clinic vault.`);
+
+    // 5. Attempt remote deletion from server
+    try {
+      await patientApi.deletePatient(patientId, cid);
+      const action = offlineStorage.getOfflineQueue(cid).find(
+        (q) => q.patientId === patientId && q.type === 'DELETE_PATIENT'
+      );
+      if (action) {
+        offlineStorage.removeMutation(action.id, cid);
+      }
+    } catch (err) {
+      console.warn('Backend API delete offline (queued for sync):', err);
+    }
   };
 
   const handleSaveClinicVisit = async (patientId: string, visitData: ANCVisitInput) => {
+    const cid = currentClinic?.id || 'clinic-4b-rampur';
     try {
-      // 1. Send to backend encrypted local DB
+      // 1. Queue offline visit mutation first
+      offlineStorage.enqueueMutation({
+        type: 'ADD_VISIT',
+        clinicId: cid,
+        patientId,
+        payload: visitData,
+      });
+
       let updatedFromBackend: Patient | null = null;
       let newVisitRecord: ANCVisit | null = null;
-      const cid = currentClinic?.id || 'clinic-4b-rampur';
 
       try {
         const res = await patientApi.addPatientClinicVisit(patientId, visitData, cid);
         if (res?.success && res?.data?.patient) {
           updatedFromBackend = res.data.patient;
           newVisitRecord = res.data.visit;
+          const action = offlineStorage.getOfflineQueue(cid).find(
+            (q) => q.patientId === patientId && q.type === 'ADD_VISIT'
+          );
+          if (action) {
+            offlineStorage.removeMutation(action.id, cid);
+          }
         }
       } catch (e) {
-        console.warn('Backend API offline or unreachable, applying in-memory state update:', e);
+        console.warn('Backend API offline or unreachable, visit safely queued for background sync:', e);
       }
 
-      // 2. Reactive In-Memory State Update
+      // 2. Reactive In-Memory & Local Cache State Update
       setPatients((prevList) => {
         const updatedList = prevList.map((p) => {
           if (p.id !== patientId) return p;
@@ -320,11 +382,13 @@ function DashboardContent() {
             assessedTime: 'Just now (Visit #' + visitNo + ')',
             syncStatus: 'updated-local',
             ancVisits: [...existingVisits, fallbackVisit],
+            updatedAt: new Date().toISOString(),
           };
 
           return updated;
         });
 
+        offlineStorage.saveCachedPatients(cid, updatedList);
         return updatedList;
       });
 
@@ -379,31 +443,57 @@ function DashboardContent() {
   };
 
   const handleAddPatient = async (newPatient: Patient) => {
-    // 1. Instantly update React memory state
+    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const offlinePatient: Patient = {
+      ...newPatient,
+      syncStatus: 'updated-local',
+      syncNode: 'Local Encrypted Station',
+      syncProtocol: 'Offline Persistent Vault / Queued Sync',
+      tenantId: cid,
+      clinicId: cid,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Instantly update React memory state & browser persistent cache
     setPatients((prev) => {
-      const filtered = prev.filter((p) => p.id !== newPatient.id);
-      const updatedList = [newPatient, ...filtered];
+      const filtered = prev.filter((p) => p.id !== offlinePatient.id);
+      const updatedList = [offlinePatient, ...filtered];
+      offlineStorage.saveCachedPatients(cid, updatedList);
       return updatedList;
     });
 
-    setSelectedPatientId(newPatient.id);
-    showToast(`Mother ${newPatient.name} registered in encrypted vault.`);
+    setSelectedPatientId(offlinePatient.id);
+    showToast(`Mother ${offlinePatient.name} registered in encrypted vault.`);
 
-    // 2. Persist to server AES-256-GCM encrypted database & PostgreSQL
+    // 2. Queue in persistent offline mutation store
+    offlineStorage.enqueueMutation({
+      type: 'CREATE_PATIENT',
+      clinicId: cid,
+      patientId: offlinePatient.id,
+      payload: offlinePatient,
+    });
+
+    // 3. Persist to server AES-256-GCM encrypted database & PostgreSQL if online
     try {
-      const cid = currentClinic?.id || 'clinic-4b-rampur';
-      const res = await patientApi.createPatient(newPatient, cid);
+      const res = await patientApi.createPatient(offlinePatient, cid);
       if (res?.success && res?.data) {
         const serverPatient: Patient = res.data;
+        const action = offlineStorage.getOfflineQueue(cid).find(
+          (q) => q.patientId === offlinePatient.id && q.type === 'CREATE_PATIENT'
+        );
+        if (action) {
+          offlineStorage.removeMutation(action.id, cid);
+        }
         setPatients((prev) => {
           const updatedList = prev.map((p) =>
-            p.id === newPatient.id || p.id === serverPatient.id ? serverPatient : p
+            p.id === offlinePatient.id || p.id === serverPatient.id ? serverPatient : p
           );
+          offlineStorage.saveCachedPatients(cid, updatedList);
           return updatedList;
         });
       }
     } catch (err) {
-      console.warn('Backend API offline error saving mother:', err);
+      console.warn('Backend API offline error saving mother (queued for background sync):', err);
     }
   };
 

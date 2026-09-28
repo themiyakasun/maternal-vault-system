@@ -202,9 +202,18 @@ export const localEncryptedDb = {
     return localPatientsCache.find(p => p.id === id);
   },
 
-  // Insert a new patient
+  // Insert or upsert a patient
   insert(patient: Patient): Patient {
-    localPatientsCache.unshift(patient);
+    const existingIdx = localPatientsCache.findIndex(p => p.id === patient.id);
+    if (existingIdx !== -1) {
+      localPatientsCache[existingIdx] = {
+        ...localPatientsCache[existingIdx],
+        ...patient,
+        updatedAt: patient.updatedAt || new Date().toISOString(),
+      };
+    } else {
+      localPatientsCache.unshift(patient);
+    }
     dbRevision++;
     encryptAndSave(localPatientsCache);
     return patient;
