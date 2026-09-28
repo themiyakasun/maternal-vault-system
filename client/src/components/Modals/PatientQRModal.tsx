@@ -7,22 +7,16 @@ import {
   QrCode,
   Download,
   Printer,
-  Copy,
   Check,
   Smartphone,
   ShieldCheck,
   HeartPulse,
   PhoneCall,
-  Code2,
   Activity,
   Truck,
-  Zap,
   Maximize2,
   Minimize2,
   Eye,
-  ChevronDown,
-  ChevronUp,
-  FileJson,
   Link,
   Globe,
   Bell,
@@ -427,16 +421,10 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
   onClose,
   patient,
 }) => {
-  const [qrMode, setQrMode] = useState<'camera-link' | 'gzip-compressed' | 'full-json'>('camera-link');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [gzipPayload, setGzipPayload] = useState<string>('');
-  const [gzipStats, setGzipStats] = useState<{ originalSize: number; compressedSize: number; savings: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [copiedJSON, setCopiedJSON] = useState<boolean>(false);
-  const [copiedGzip, setCopiedGzip] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [activeMobileTab, setActiveMobileTab] = useState<'profile' | 'history' | 'obstetric' | 'clinic' | 'plan'>('profile');
-  const [showRawInspector, setShowRawInspector] = useState<boolean>(false);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
 
   // Exact complete patient vault JSON structure
@@ -445,20 +433,14 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
     return buildCompletePatientVaultJSON(patient);
   }, [patient]);
 
-  // Clean Plain UTF-8 JSON payload string for direct mobile scanner ingestion
-  const rawUtf8Payload = useMemo(() => {
-    if (!completeVaultData) return '';
-    return JSON.stringify(completeVaultData, null, 2);
-  }, [completeVaultData]);
-
-  // Mobile Web Pass direct URL (Camera-Scannable)
+  // Mobile Web Pass direct URL (Camera-Scannable fallback)
   const mobilePassUrl = useMemo(() => {
     if (!patient) return '';
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
     return `${origin}/mobile/patient/${encodeURIComponent(patient.id)}`;
   }, [patient]);
 
-  // Generate high-speed, high-contrast QR code based on selected mode
+  // Generate high-speed instant health pass QR code
   useEffect(() => {
     if (!patient || !isOpen || !completeVaultData) return;
 
@@ -467,33 +449,12 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
 
     const generateQR = async () => {
       try {
-        let payloadToEncode = '';
-        
-        if (qrMode === 'camera-link') {
-          payloadToEncode = mobilePassUrl;
-        } else if (qrMode === 'gzip-compressed') {
-          const compactStr = JSON.stringify(compressVaultForQR(completeVaultData));
-          const compressed = await compressStringGzip(compactStr);
-          payloadToEncode = compressed;
-          if (isMounted) {
-            setGzipPayload(compressed);
-            const origLen = rawUtf8Payload.length;
-            const compLen = compressed.length;
-            const savings = `${((1 - compLen / origLen) * 100).toFixed(1)}%`;
-            setGzipStats({
-              originalSize: origLen,
-              compressedSize: compLen,
-              savings,
-            });
-          }
-        } else {
-          // Uncompressed Full JSON compact structure
-          payloadToEncode = JSON.stringify(compressVaultForQR(completeVaultData));
-        }
-        
+        const compactStr = JSON.stringify(compressVaultForQR(completeVaultData));
+        const compressed = await compressStringGzip(compactStr);
+
         // High-speed Error Correction Level 'L' (low density, large dots, instant <0.05s camera autofocus)
-        const url = await QRCode.toDataURL(payloadToEncode, {
-          errorCorrectionLevel: qrMode === 'camera-link' ? 'M' : 'L',
+        const url = await QRCode.toDataURL(compressed, {
+          errorCorrectionLevel: 'L',
           margin: 2,
           width: isZoomed ? 480 : 340,
           color: {
@@ -533,44 +494,9 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [patient, isOpen, qrMode, mobilePassUrl, completeVaultData, rawUtf8Payload, isZoomed]);
+  }, [patient, isOpen, mobilePassUrl, completeVaultData, isZoomed]);
 
   if (!isOpen || !patient || !completeVaultData) return null;
-
-  const handleCopyJSON = async () => {
-    try {
-      await navigator.clipboard.writeText(rawUtf8Payload);
-      setCopiedJSON(true);
-      setTimeout(() => setCopiedJSON(false), 2000);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = rawUtf8Payload;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiedJSON(true);
-      setTimeout(() => setCopiedJSON(false), 2000);
-    }
-  };
-
-  const handleCopyGzipPayload = async () => {
-    const payload = gzipPayload || '';
-    try {
-      await navigator.clipboard.writeText(payload);
-      setCopiedGzip(true);
-      setTimeout(() => setCopiedGzip(false), 2000);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = payload;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiedGzip(true);
-      setTimeout(() => setCopiedGzip(false), 2000);
-    }
-  };
 
   const handleCopyLink = async () => {
     try {
@@ -589,21 +515,11 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
     }
   };
 
-  const handleDownloadJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(rawUtf8Payload);
-    const link = document.createElement('a');
-    link.href = dataStr;
-    link.download = `MaternaVault-${patient.id.replace('#', '')}-${patient.name.replace(/\s+/g, '_')}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleDownloadQR = () => {
     if (!qrDataUrl) return;
     const link = document.createElement('a');
     link.href = qrDataUrl;
-    link.download = `MaternaVault-${patient.id.replace('#', '')}-${patient.name.replace(/\s+/g, '_')}-${qrMode}.png`;
+    link.download = `MaternaVault-${patient.id.replace('#', '')}-${patient.name.replace(/\s+/g, '_')}-QR-Pass.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -683,52 +599,6 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
         {/* Main Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 bg-[#f1f5f9]/50 space-y-4">
           
-          {/* QR Transfer 3-Mode Selector Bar */}
-          <div className="bg-white border border-[#cbd5e1] rounded-xl p-2 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#0f172a] px-2">
-              <Zap className="w-4 h-4 text-[#006194]" />
-              <span>Select Transfer Mode:</span>
-            </div>
-            <div className="flex items-center gap-1.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-              <button
-                onClick={() => setQrMode('camera-link')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  qrMode === 'camera-link'
-                    ? 'bg-[#006194] text-white shadow-xs'
-                    : 'bg-[#f1f5f9] text-[#475569] hover:bg-[#e2e8f0]'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>📱 Phone Camera Pass (Web)</span>
-              </button>
-
-              <button
-                onClick={() => setQrMode('gzip-compressed')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  qrMode === 'gzip-compressed'
-                    ? 'bg-[#047857] text-white shadow-xs ring-2 ring-[#059669]/30'
-                    : 'bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0] hover:bg-[#dcfce7]'
-                }`}
-                title="Compresses data using Gzip/Deflate for ultra-fast instant mobile camera scanning"
-              >
-                <Zap className="w-3.5 h-3.5 text-[#22c55e] fill-[#22c55e]" />
-                <span>⚡ Gzip Compressed (Fast Scan)</span>
-              </button>
-
-              <button
-                onClick={() => setQrMode('full-json')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  qrMode === 'full-json'
-                    ? 'bg-[#006194] text-white shadow-xs'
-                    : 'bg-[#f1f5f9] text-[#475569] hover:bg-[#e2e8f0]'
-                }`}
-              >
-                <FileJson className="w-3.5 h-3.5" />
-                <span>💾 JSON Vault (Uncompressed)</span>
-              </button>
-            </div>
-          </div>
-
           {/* Main 2-Column Grid */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
             
@@ -737,49 +607,14 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
               
               {/* Scan Status Badge */}
               <div className="w-full flex items-center justify-between pb-2.5 border-b border-[#e2e8f0] mb-3">
-                <div className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-md border ${
-                  qrMode === 'gzip-compressed'
-                    ? 'text-[#065f46] bg-[#d1fae5] border-[#a7f3d0]'
-                    : 'text-[#16a34a] bg-[#dcfce7] border-[#bbf7d0]'
-                }`}>
-                  <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span>
-                    {qrMode === 'camera-link'
-                      ? 'Universal Mobile Camera Pass'
-                      : qrMode === 'gzip-compressed'
-                      ? '⚡ Gzip Deflate Compressed'
-                      : 'Complete 100% Medical Vault (Raw)'}
-                  </span>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-md border text-[#065f46] bg-[#d1fae5] border-[#a7f3d0]">
+                  <QrCode className="w-3.5 h-3.5 text-[#047857]" />
+                  <span>Instant Medical QR Pass</span>
                 </div>
                 <span className="text-[10.5px] font-semibold text-[#006194]">
-                  {qrMode === 'camera-link'
-                    ? 'Point Smartphone Camera'
-                    : qrMode === 'gzip-compressed'
-                    ? 'Instant Mobile Scan'
-                    : 'EHR / Migration'}
+                  Offline Mobile Scan
                 </span>
               </div>
-
-              {/* Compression Metric Card (Shown on Gzip Mode) */}
-              {qrMode === 'gzip-compressed' && gzipStats && (
-                <div className="w-full mb-3 p-2.5 bg-[#f0fdf4] border border-[#86efac] rounded-xl flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-[#22c55e] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                      ⚡
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-[#14532d] flex items-center gap-1.5">
-                        <span>Original: {gzipStats.originalSize} B</span>
-                        <span>➔</span>
-                        <span className="text-[#15803d]">Gzip: {gzipStats.compressedSize} B</span>
-                      </div>
-                      <div className="text-[10.5px] text-[#166534]">
-                        <strong>{gzipStats.savings} Smaller Payload</strong> • Low Density • Instant Optical Scan
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* HIGH-CONTRAST OPTICAL QR DISPLAY FRAME */}
               <div
@@ -820,103 +655,49 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
               </div>
 
               {/* Mode Description Box */}
-              <div className="mt-3 w-full p-2.5 rounded-lg bg-[#f8fafc] border border-[#e2e8f0] text-[11px] text-[#475569] space-y-1">
+              <div className="mt-3 w-full p-3 rounded-xl bg-[#f8fafc] border border-[#e2e8f0] text-xs text-[#475569] space-y-1">
                 <div className="font-bold text-[#0f172a] flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#047857]" />
-                  <span>
-                    {qrMode === 'camera-link'
-                      ? 'Camera Direct Open (Safari / Chrome)'
-                      : qrMode === 'gzip-compressed'
-                      ? '⚡ Gzip Deflate Compressed (High-Speed Scan)'
-                      : 'Complete Vault Payload (100% Data Fidelity)'}
-                  </span>
+                  <ShieldCheck className="w-4 h-4 text-[#047857]" />
+                  <span>Quick Scan Health Pass</span>
                 </div>
-                <p className="text-[10.5px] leading-relaxed text-[#64748b]">
-                  {qrMode === 'camera-link'
-                    ? 'Scanning with any smartphone camera opens the modern Pregnancy Record mobile app UI with live Key Vitals, Demographics, Clinic visits, and 1-tap JSON download.'
-                    : qrMode === 'gzip-compressed'
-                    ? 'Compresses full patient EHR record by ~70% into standard Gzip Deflate byte stream. Scans in <0.1s on mobile cameras with instant offline parsing.'
-                    : 'Encodes complete uncompressed maternal clinical history, all visits, labs, comorbidities, partner details, and risk stratification for direct system-to-system transfer.'}
+                <p className="text-[11px] leading-relaxed text-[#64748b]">
+                  Scan with any smartphone camera or clinical tablet to access full maternal records, key vitals, and clinic visits instantly without internet.
                 </p>
               </div>
 
               {/* Action Buttons Toolbar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3">
-                {qrMode === 'gzip-compressed' ? (
-                  <button
-                    onClick={handleCopyGzipPayload}
-                    className="px-2 py-2 rounded-lg bg-[#047857] hover:bg-[#065f46] text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                    title="Copy compressed base64url payload to clipboard"
-                  >
-                    {copiedGzip ? (
-                      <Check className="w-3.5 h-3.5 text-white" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                    <span>{copiedGzip ? 'Copied Gzip!' : 'Copy Gzip Base64'}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleDownloadJSON}
-                    className="px-2 py-2 rounded-lg bg-[#0284c7] hover:bg-[#0369a1] text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                    title="Download .json file containing complete patient vault"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Save .JSON</span>
-                  </button>
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full mt-3">
+                <button
+                  onClick={handleDownloadQR}
+                  className="px-3 py-2 rounded-lg bg-[#006194] hover:bg-[#004f7b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  title="Download PNG QR Image"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Save QR Image</span>
+                </button>
 
                 <button
-                  onClick={handleCopyJSON}
-                  className="px-2 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                  title="Copy Complete Vault JSON to clipboard"
+                  onClick={handlePrint}
+                  className="px-3 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  title="Print QR Health Pass Card"
                 >
-                  {copiedJSON ? (
-                    <Check className="w-3.5 h-3.5 text-[#16a34a]" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                  <span>{copiedJSON ? 'Copied!' : 'Copy JSON'}</span>
+                  <Printer className="w-3.5 h-3.5 text-[#006194]" />
+                  <span>Print Pass</span>
                 </button>
 
                 <button
                   onClick={handleCopyLink}
-                  className="px-2 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
+                  className="px-3 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                   title="Copy Mobile Pass URL Link"
                 >
                   {copiedLink ? (
                     <Check className="w-3.5 h-3.5 text-[#16a34a]" />
                   ) : (
-                    <Link className="w-3.5 h-3.5" />
+                    <Link className="w-3.5 h-3.5 text-[#006194]" />
                   )}
-                  <span>{copiedLink ? 'Copied Link!' : 'Copy Link'}</span>
-                </button>
-
-                <button
-                  onClick={handleDownloadQR}
-                  className="px-2 py-2 rounded-lg bg-[#006194] hover:bg-[#004f7b] text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                  title="Download PNG QR Image"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Save QR PNG</span>
+                  <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
                 </button>
               </div>
-
-              {/* Collapsible Inspect Raw Payload Toggle */}
-              <button
-                onClick={() => setShowRawInspector(!showRawInspector)}
-                className="mt-3 w-full py-1.5 px-3 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[11px] text-[#475569] font-semibold transition-all cursor-pointer flex items-center justify-between"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Code2 className="w-3.5 h-3.5 text-[#006194]" />
-                  <span>{showRawInspector ? 'Hide Full Vault JSON Record' : 'View Full Vault JSON Record (All Data)'}</span>
-                </div>
-                {showRawInspector ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-[#64748b]" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-[#64748b]" />
-                )}
-              </button>
             </div>
 
             {/* Right Column: Live Mobile Smartphone Preview Simulator matching User Reference Design */}
@@ -1366,11 +1147,11 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                         </a>
 
                         <button
-                          onClick={handleDownloadJSON}
+                          onClick={handleDownloadQR}
                           className="w-full bg-[#006194] hover:bg-[#004f7b] text-white py-2.5 rounded-2xl text-center text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>Download Complete Vault (.JSON)</span>
+                          <span>Save QR Health Pass Image</span>
                         </button>
                       </div>
                     )}
@@ -1448,73 +1229,25 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
 
           </div>
 
-          {/* Collapsible Raw JSON Schema Disclosure */}
-          {showRawInspector && (
-            <div className="bg-[#0f172a] text-[#e2e8f0] rounded-xl p-4 border border-[#334155] shadow-lg animate-in fade-in slide-in-from-top-2 duration-150 space-y-3">
-              <div className="flex items-center justify-between border-b border-[#334155] pb-2 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-[#38bdf8]" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    Complete Transferred Medical Vault (100% Data Fidelity)
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleDownloadJSON}
-                    className="px-2.5 py-1 bg-[#0284c7] hover:bg-[#0369a1] text-white rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Save .JSON File</span>
-                  </button>
-                  <button
-                    onClick={handleCopyJSON}
-                    className="px-2.5 py-1 bg-[#334155] hover:bg-[#475569] text-white rounded text-[11px] font-mono flex items-center gap-1 cursor-pointer"
-                  >
-                    {copiedJSON ? (
-                      <Check className="w-3.5 h-3.5 text-[#22c55e]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                    <span>{copiedJSON ? 'Copied!' : 'Copy Full JSON'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Code Box */}
-              <div className="bg-[#020617] p-3 rounded-lg border border-[#1e293b] font-mono text-[11px] text-[#38bdf8] overflow-x-auto max-h-56 leading-relaxed select-all">
-                <pre className="text-[#93c5fd]">
-                  {rawUtf8Payload}
-                </pre>
-              </div>
-
-              <div className="flex justify-between items-center text-[10.5px] font-mono text-[#94a3b8] pt-1">
-                <span>Payload Size: {rawUtf8Payload.length} characters</span>
-                <span>Encrypted Standard: MaternaVault AES-256 / UTF-8</span>
-                <span>Visits Count: {completeVaultData.visits.length}</span>
-              </div>
-            </div>
-          )}
-
         </div>
 
         {/* Modal Footer */}
         <div className="bg-[#f8fafc] px-6 py-3 border-t border-[#e2e8f0] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-xs text-[#64748b] font-mono">
-            <span className="text-[#047857] font-semibold">● Complete Medical History</span>
+          <div className="flex items-center gap-2 text-xs text-[#64748b]">
+            <span className="text-[#047857] font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#047857]" /> Complete Pregnancy Record
+            </span>
             <span>•</span>
-            <span>Pregnancy Record App Pass</span>
-            <span>•</span>
-            <span>0% Data Loss</span>
+            <span>Instant Offline QR Pass</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="px-3 py-1.5 text-xs font-semibold text-[#334155] bg-white border border-[#cbd5e1] rounded-lg hover:bg-[#f1f5f9] cursor-pointer flex items-center gap-1"
+              className="px-3.5 py-1.5 text-xs font-semibold text-[#334155] bg-white border border-[#cbd5e1] rounded-lg hover:bg-[#f1f5f9] cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
+              <Printer className="w-3.5 h-3.5 text-[#006194]" />
+              <span>Print Pass</span>
             </button>
             <button
               onClick={onClose}
