@@ -101,23 +101,70 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST || '13.215.191.93' }}
-          username: ${{ secrets.EC2_USER || 'ubuntu' }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.EC2_HOST || '13.215.191.93' }}
+          REMOTE_USER: ${{ secrets.EC2_USER || 'ubuntu' }}
+        run: |
+          python3 - << 'PYEOF'
+          import os, sys, subprocess
+
+          raw_key = os.environ.get("SSH_PRIVATE_KEY", "").strip()
+          host = os.environ.get("REMOTE_HOST", "13.215.191.93").strip()
+          user = os.environ.get("REMOTE_USER", "ubuntu").strip()
+
+          if not raw_key:
+              print("::error::SSH Private Key secret is empty. Please ensure EC2_SSH_KEY (or SSH_PRIVATE_KEY) is set in GitHub Secrets.", file=sys.stderr)
+              sys.exit(1)
+
+          # Strip enclosing quotes if user pasted secret inside quotes
+          if (raw_key.startswith('"') and raw_key.endswith('"')) or (raw_key.startswith("'") and raw_key.endswith("'")):
+              raw_key = raw_key[1:-1].strip()
+
+          # Replace literal \n if pasted as single-line string with escaped newlines
+          if "\\n" in raw_key and "\n" not in raw_key:
+              raw_key = raw_key.replace("\\n", "\n")
+
+          # Normalize CRLF to LF and ensure trailing newline
+          raw_key = raw_key.replace("\r\n", "\n").replace("\r", "\n").strip() + "\n"
+
+          if "BEGIN" not in raw_key or "PRIVATE KEY" not in raw_key:
+              print("::error::The secret does not appear to contain a valid private key. Ensure it includes '-----BEGIN RSA PRIVATE KEY-----' and '-----END RSA PRIVATE KEY-----'.", file=sys.stderr)
+              sys.exit(1)
+
+          ssh_dir = os.path.expanduser("~/.ssh")
+          os.makedirs(ssh_dir, mode=0o700, exist_ok=True)
+          key_path = os.path.join(ssh_dir, "deploy_key")
+
+          with open(key_path, "w", encoding="utf-8") as f:
+              f.write(raw_key)
+          os.chmod(key_path, 0o600)
+
+          # Test key validity using ssh-keygen
+          test = subprocess.run(["ssh-keygen", "-y", "-f", key_path], capture_output=True, text=True)
+          if test.returncode != 0:
+              print(f"::error::Private key validation failed: {test.stderr.strip()}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"✅ SSH deploy key validated successfully (public key prefix: {test.stdout.strip()[:32]}...)")
+          PYEOF
+
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$REMOTE_USER@$REMOTE_HOST" "
             set -e
-            echo "🚀 Starting automated deployment on AWS EC2..."
-            cd "$HOME/maternal-vault-system"
-            echo "📥 Pulling latest code from GitHub..."
+            echo '🚀 Starting automated deployment on AWS EC2...'
+            cd \$HOME/maternal-vault-system
+            echo '📥 Pulling latest code from GitHub...'
             git pull origin main
-            echo "🔨 Building and launching production containers..."
+            echo '🔨 Building and launching production containers...'
             docker compose -f docker-compose.prod.yml build
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker compose -f docker-compose.prod.yml ps
-            echo "🩺 Verifying service health..."
+            echo '🩺 Verifying service health...'
             sleep 5
             curl -f http://localhost:80/health || exit 1
             curl -f http://localhost:5000/api/health || exit 1
-            echo "✅ Auto-deployment to AWS EC2 completed successfully!"
+            echo '✅ Auto-deployment to AWS EC2 completed successfully!'
+          "
