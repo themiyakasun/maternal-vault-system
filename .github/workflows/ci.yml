@@ -1,0 +1,105 @@
+name: Continuous Integration (CI)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-ci:
+    name: Backend API & ML Engine CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Setup Python 3.11 (for ML Risk Inference)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: server/ml/requirements.txt
+
+      - name: Install Python ML Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
+
+      - name: Install Server Node Dependencies
+        run: npm ci
+
+      - name: Compile Server TypeScript
+        run: npm run build
+
+      - name: Run Server Unit & End-to-End API Integration Tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          STATION_MASTER_KEY: MATERNA_VAULT_TEST_STATION_KEY
+          OFFLINE_TOKEN_SECRET: MATERNA_VAULT_TEST_OFFLINE_SECRET
+
+  client-ci:
+    name: Frontend React 19 Client CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install Client Dependencies
+        run: npm ci
+
+      - name: Type Check TypeScript
+        run: npx tsc -b
+
+      - name: Lint Code with Oxlint
+        run: npm run lint
+
+      - name: Run Client Vitest & Testing Library Suites
+        run: npm test
+
+      - name: Build Production Vite SPA Bundle
+        run: npm run build
+
+  ml-ci:
+    name: Python ML Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify Python Script Compilation
+        run: |
+          python -m py_compile server/ml/predict_service.py
+          python -m py_compile server/ml/predict_cli.py
