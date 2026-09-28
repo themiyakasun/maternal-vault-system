@@ -81,6 +81,17 @@ class TenantStore {
   }
 
   /**
+   * Get the primary or default active tenant ID (dynamically resolves from cloud DB or cache)
+   */
+  public async getDefaultTenantId(): Promise<string> {
+    const clinics = await this.getClinics();
+    if (clinics && clinics.length > 0) {
+      return clinics[0].id;
+    }
+    return 'clinic-ambagamuwa';
+  }
+
+  /**
    * Fetch and cache staff credentials for a specific clinic from cloud DB.
    */
   public async syncStaffFromCloud(clinicId: string): Promise<void> {

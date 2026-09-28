@@ -63,7 +63,8 @@ export async function checkConnectionAndStatus(tenantId?: string): Promise<Centr
   const allLocal = localEncryptedDb.getAll({ tenantId: activeTenant, limit: 10000 }).data;
   const pendingLocal = localEncryptedDb.getPendingSync().filter(p => {
     if (!activeTenant) return true;
-    return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === activeTenant;
+    const pTenant = p.tenantId || p.clinicId;
+    return !pTenant || pTenant === activeTenant;
   });
 
   const startTime = Date.now();
@@ -244,7 +245,10 @@ async function upsertToPostgres(p: Patient): Promise<void> {
       updated_at = NOW();
   `;
 
-  const tenantId = p.tenantId || p.clinicId || 'clinic-4b-rampur';
+  let tenantId = p.tenantId || p.clinicId;
+  if (!tenantId || tenantId === 'clinic-4b-rampur') {
+    tenantId = await tenantStore.getDefaultTenantId();
+  }
 
   await pool.query(query, [
     p.id,
@@ -499,7 +503,8 @@ export async function syncLocalToPostgres(tenantId?: string): Promise<{
   // 2. Process pending deletions to PostgreSQL
   const pendingDeletions = localEncryptedDb.getPendingDeletions().filter(d => {
     if (!activeTenant) return true;
-    return (d.tenantId || 'clinic-4b-rampur') === activeTenant;
+    const dTenant = d.tenantId;
+    return !dTenant || dTenant === activeTenant;
   });
 
   for (const d of pendingDeletions) {
@@ -512,7 +517,8 @@ export async function syncLocalToPostgres(tenantId?: string): Promise<{
   // 3. Identify and push pending local records to PostgreSQL
   const pending = localEncryptedDb.getPendingSync().filter(p => {
     if (!activeTenant) return true;
-    return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === activeTenant;
+    const pTenant = p.tenantId || p.clinicId;
+    return !pTenant || pTenant === activeTenant;
   });
 
   let syncedCount = 0;
@@ -572,7 +578,8 @@ export function getSyncTelemetry(tenantId?: string): SyncTelemetry {
   const activeTenant = tenantId && tenantId !== 'all' ? tenantId : undefined;
   const pending = localEncryptedDb.getPendingSync().filter(p => {
     if (!activeTenant) return true;
-    return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === activeTenant;
+    const pTenant = p.tenantId || p.clinicId;
+    return !pTenant || pTenant === activeTenant;
   });
 
   return {

@@ -151,7 +151,10 @@ export const localEncryptedDb = {
 
     // Multi-tenant isolation filter
     if (opts.tenantId && opts.tenantId !== 'all') {
-      filtered = filtered.filter(p => (p.tenantId || 'clinic-4b-rampur') === opts.tenantId);
+      filtered = filtered.filter(p => {
+        const pTenant = p.tenantId || p.clinicId;
+        return !pTenant || pTenant === opts.tenantId;
+      });
     }
 
     if (opts.search) {
@@ -203,18 +206,13 @@ export const localEncryptedDb = {
   },
 
   // Get single patient by NIC number (case-insensitive & trimmed)
-  getByNic(nic: string, tenantId?: string): Patient | undefined {
+  getByNic(nic: string, _tenantId?: string): Patient | undefined {
     if (!nic) return undefined;
     const clean = nic.trim().toUpperCase();
     if (!clean) return undefined;
     return localPatientsCache.find(p => {
       if (!p.nicNo) return false;
-      const match = p.nicNo.trim().toUpperCase() === clean;
-      if (!match) return false;
-      if (tenantId && tenantId !== 'all') {
-        return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === tenantId;
-      }
-      return true;
+      return p.nicNo.trim().toUpperCase() === clean;
     });
   },
 
@@ -351,7 +349,7 @@ export const localEncryptedDb = {
     const patient = localPatientsCache[idx];
     pendingDeletions.push({
       id: patient.id,
-      tenantId: patient.tenantId || patient.clinicId || 'clinic-4b-rampur',
+      tenantId: patient.tenantId || patient.clinicId,
     });
 
     localPatientsCache.splice(idx, 1);
@@ -454,7 +452,10 @@ export const localEncryptedDb = {
   getStats(tenantId?: string) {
     let list = [...localPatientsCache];
     if (tenantId && tenantId !== 'all') {
-      list = list.filter(p => (p.tenantId || 'clinic-4b-rampur') === tenantId);
+      list = list.filter(p => {
+        const pTenant = p.tenantId || p.clinicId;
+        return !pTenant || pTenant === tenantId;
+      });
     }
 
     const total = list.length;

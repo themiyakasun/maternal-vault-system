@@ -146,6 +146,10 @@ export const offlineStorage = {
           if (onSynced) {
             onSynced(serverResult?.data, item.type);
           }
+        } else if (serverResult?.code === 'DUPLICATE_NIC') {
+          // If rejected as a duplicate, remove from queue to prevent infinite retry loops
+          console.warn(`⚠️ Offline mutation [${item.type}] rejected as DUPLICATE_NIC for ${item.patientId}. Dequeuing.`);
+          this.removeMutation(item.id, item.clinicId);
         }
       } catch (err) {
         console.warn(`Network unavailable during flush for [${item.type}] (${item.patientId}):`, err);
@@ -165,20 +169,18 @@ export const offlineStorage = {
     clinicId: string
   ): Patient[] {
     const queue = this.getOfflineQueue(clinicId);
-    const pendingPatientIds = new Set(queue.map(q => q.patientId));
     const deletedPatientIds = new Set(
       queue.filter(q => q.type === 'DELETE_PATIENT').map(q => q.patientId)
     );
 
     // Filter out any patients that have a pending offline deletion
     const filteredServer = serverList.filter(p => !deletedPatientIds.has(p.id));
-
-    // Find any local patients that are not on the server yet (created offline or marked updated-local)
     const serverIdSet = new Set(filteredServer.map(p => p.id));
+
+    // Retain any local patient that is not yet on the server, provided it was not explicitly deleted
     const unpushedLocalPatients = currentLocalList.filter(p => {
       if (deletedPatientIds.has(p.id)) return false;
-      // If it's in the pending queue or marked updated-local and not in serverList, KEEP IT!
-      return !serverIdSet.has(p.id) && (pendingPatientIds.has(p.id) || p.syncStatus === 'updated-local');
+      return !serverIdSet.has(p.id);
     });
 
     // Merge: unpushed local patients stay at the top so they never disappear

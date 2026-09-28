@@ -50,7 +50,8 @@ import {
 } from 'lucide-react';
 
 function DashboardContent() {
-  const { currentUser, currentClinic } = useAuth();
+  const { currentUser, currentClinic, clinics } = useAuth();
+  const activeClinicId = currentClinic?.id || (clinics && clinics.length > 0 ? clinics[0].id : 'clinic-ambagamuwa');
   const [activeNavTab, setActiveNavTab] = useState('records'); // default or toggleable
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
@@ -61,7 +62,7 @@ function DashboardContent() {
   // Load clinic patients with offline-first persistence & multi-device sync
   useEffect(() => {
     let isMounted = true;
-    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const cid = activeClinicId;
 
     // 1. Instant load from local browser persistent cache (zero latency offline support)
     const cachedPatients = offlineStorage.loadCachedPatients(cid);
@@ -238,7 +239,7 @@ function DashboardContent() {
   const handleConfirmDeletePatient = async (patientId: string) => {
     const targetPatient = patients.find((p) => p.id === patientId);
     const patientName = targetPatient?.name || patientId;
-    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const cid = activeClinicId;
 
     // 1. Immediately update React memory state & browser persistent cache
     setPatients((prev) => {
@@ -297,7 +298,7 @@ function DashboardContent() {
   };
 
   const handleSaveClinicVisit = async (patientId: string, visitData: ANCVisitInput) => {
-    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const cid = activeClinicId;
     try {
       // 1. Queue offline visit mutation first
       offlineStorage.enqueueMutation({
@@ -443,7 +444,7 @@ function DashboardContent() {
   };
 
   const handleAddPatient = async (newPatient: Patient) => {
-    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const cid = activeClinicId;
 
     // 0. Check duplicate NIC in local state
     if (newPatient.nicNo && newPatient.nicNo.trim()) {
@@ -533,7 +534,7 @@ function DashboardContent() {
 
   const handleCentralSyncComplete = async () => {
     setIsSyncing(true);
-    const cid = currentClinic?.id || 'clinic-4b-rampur';
+    const cid = activeClinicId;
     try {
       const res = await patientApi.getAllPatients(cid);
       if (res?.data) {

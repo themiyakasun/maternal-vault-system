@@ -90,6 +90,18 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
   const [age, setAge] = useState('26');
   const [dob, setDob] = useState('1998-05-14');
   const [nicNo, setNicNo] = useState('');
+
+  // Debounced live NIC validation on keystroke or pre-fill
+  useEffect(() => {
+    if (!nicNo.trim()) {
+      setNicError(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      validateNic(nicNo);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [nicNo, existingPatients]);
   const [phmRegisterNo, setPhmRegisterNo] = useState('');
   const [mohArea, setMohArea] = useState(currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur');
   const [village, setVillage] = useState('Rampur North Sector 2');
@@ -388,9 +400,15 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (nicError) {
+      alert(`Cannot register: ${nicError}`);
+      return;
+    }
+
     if (nicNo.trim()) {
       const isValid = await validateNic(nicNo);
       if (!isValid) {
+        alert(`Cannot register: Mother with NIC "${nicNo.trim().toUpperCase()}" is already registered.`);
         return;
       }
     }
@@ -557,8 +575,8 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
       assessedBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Sister Priya Sharma (PHM Lead)',
       assessedTime: isHistorical ? `${formattedBookingDate} (Paper Record)` : 'Just now (Encrypted)',
       assessedLocation: currentClinic?.name || 'MOH Rampur Clinic',
-      tenantId: currentClinic?.id || 'clinic-4b-rampur',
-      clinicId: currentClinic?.id || 'clinic-4b-rampur',
+      tenantId: currentClinic?.id || 'clinic-ambagamuwa',
+      clinicId: currentClinic?.id || 'clinic-ambagamuwa',
       notes: notes.trim() || (isHistorical ? `Historical record documented on ${formattedBookingDate}.` : 'Registration intake complete.'),
     };
 
@@ -1875,10 +1893,19 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
             <button
               type="submit"
               form="maternal-intake-form"
-              className="px-6 py-2.5 text-xs font-bold text-white bg-[#006194] hover:bg-[#004f7b] rounded-lg shadow-md cursor-pointer flex items-center gap-2 transition-all transform active:scale-95"
+              disabled={Boolean(nicError) || isCheckingNic}
+              className={`px-6 py-2.5 text-xs font-bold text-white rounded-lg shadow-md flex items-center gap-2 transition-all transform active:scale-95 ${
+                nicError 
+                  ? 'bg-red-600 opacity-60 cursor-not-allowed' 
+                  : 'bg-[#006194] hover:bg-[#004f7b] cursor-pointer'
+              }`}
             >
-              <Sparkles className="w-4 h-4 text-sky-200" />
-              <span>Register Mother (Save to Vault)</span>
+              {nicError ? (
+                <AlertTriangle className="w-4 h-4 text-white" />
+              ) : (
+                <Sparkles className="w-4 h-4 text-sky-200" />
+              )}
+              <span>{nicError ? 'Duplicate NIC (Cannot Register)' : 'Register Mother (Save to Vault)'}</span>
             </button>
           </div>
         </div>

@@ -4,6 +4,7 @@ import zlib from 'zlib';
 import { localEncryptedDb } from '../db/localEncryptedDb.js';
 import { probePostgres, upsertToPostgres, deleteFromPostgres } from '../services/syncService.js';
 import { pool } from '../db/index.js';
+import { tenantStore } from '../db/tenantStore.js';
 import { evaluatePatientRisk } from '../services/mlRiskService.js';
 import type { Patient, CreatePatientInput, UpdatePatientInput, ANCVisitInput } from '../types/patient.js';
 
@@ -91,15 +92,18 @@ export const createPatient = async (req: Request, res: Response) => {
     }
 
     const newId = input.id ? normalizeId(input.id) : `#${Math.floor(1000 + Math.random() * 9000)}`;
-    const tenantId = input.tenantId || (req.headers['x-tenant-id'] as string) || 'clinic-4b-rampur';
-    const clinicId = input.clinicId || tenantId;
+    let tenantId = input.tenantId || (req.headers['x-tenant-id'] as string);
+    if (!tenantId || tenantId === 'clinic-4b-rampur') {
+      tenantId = await tenantStore.getDefaultTenantId();
+    }
+    const clinicId = tenantId;
 
     // Check duplicate NIC in both Local Encrypted DB and Cloud PostgreSQL
     if (input.nicNo && input.nicNo.trim()) {
       const cleanNic = input.nicNo.trim().toUpperCase();
 
-      // 1. Check Local Encrypted DB
-      const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+      // 1. Check Local Encrypted DB (check globally across all cached records)
+      const localDup = localEncryptedDb.getByNic(cleanNic);
       if (localDup && (!input.id || localDup.id !== normalizeId(input.id))) {
         return res.status(409).json({
           success: false,
@@ -114,14 +118,14 @@ export const createPatient = async (req: Request, res: Response) => {
         });
       }
 
-      // 2. Check PostgreSQL Cloud DB if online
+      // 2. Check PostgreSQL Cloud DB if online (check globally for cleanNic)
       try {
         const isOnline = await probePostgres();
         if (isOnline) {
           const client = await pool.connect();
           const pgRes = await client.query(
-            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) LIMIT 1`,
-            [cleanNic, tenantId]
+            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 LIMIT 1`,
+            [cleanNic]
           );
           client.release();
           if (pgRes.rows.length > 0) {
@@ -262,17 +266,19 @@ export const createPatient = async (req: Request, res: Response) => {
     // 1. Write first to local encrypted database
     localEncryptedDb.insert(newPatient);
 
-    // 2. Immediately push to PostgreSQL if online so other devices receive it immediately
-    probePostgres().then(async online => {
-      if (online) {
-        try {
-          await upsertToPostgres(newPatient);
-          localEncryptedDb.markSynced(newPatient.id);
-        } catch (err) {
-          console.warn('PostgreSQL direct upsert failed, queued for background sync:', err);
-        }
+    // 2. Immediately push to PostgreSQL if online (await so response confirms cloud persistence)
+    try {
+      const isOnline = await probePostgres();
+      if (isOnline) {
+        await upsertToPostgres(newPatient);
+        newPatient.syncStatus = 'synced-p2p';
+        newPatient.syncNode = 'Central PostgreSQL';
+        newPatient.syncProtocol = 'PostgreSQL Real-Time Synchronized';
+        localEncryptedDb.markSynced(newPatient.id, 'Central PostgreSQL', 'PostgreSQL Real-Time Synchronized');
       }
-    });
+    } catch (err) {
+      console.warn('PostgreSQL direct upsert failed, queued for background sync:', err);
+    }
 
     return res.status(201).json({
       success: true,
@@ -306,9 +312,8 @@ export const updatePatient = async (req: Request, res: Response) => {
     // If NIC is being updated, verify uniqueness
     if (updates.nicNo && updates.nicNo.trim()) {
       const cleanNic = updates.nicNo.trim().toUpperCase();
-      const tenantId = updates.tenantId || existing.tenantId || existing.clinicId;
 
-      const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+      const localDup = localEncryptedDb.getByNic(cleanNic);
       if (localDup && localDup.id !== id) {
         return res.status(409).json({
           success: false,
@@ -322,8 +327,8 @@ export const updatePatient = async (req: Request, res: Response) => {
         if (isOnline) {
           const client = await pool.connect();
           const pgRes = await client.query(
-            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) AND id != $3 LIMIT 1`,
-            [cleanNic, tenantId, id]
+            `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND id != $2 LIMIT 1`,
+            [cleanNic, id]
           );
           client.release();
           if (pgRes.rows.length > 0) {
@@ -371,18 +376,17 @@ export const updatePatient = async (req: Request, res: Response) => {
 
     const updated = localEncryptedDb.update(id, merged);
 
-    // Immediately push to PostgreSQL if online so other devices receive it immediately
+    // Immediately push to PostgreSQL if online (await so response confirms cloud persistence)
     if (updated) {
-      probePostgres().then(async online => {
-        if (online) {
-          try {
-            await upsertToPostgres(updated);
-            localEncryptedDb.markSynced(updated.id);
-          } catch (err) {
-            console.warn('PostgreSQL direct update failed, queued for background sync:', err);
-          }
+      try {
+        const isOnline = await probePostgres();
+        if (isOnline) {
+          await upsertToPostgres(updated);
+          localEncryptedDb.markSynced(updated.id);
         }
-      });
+      } catch (err) {
+        console.warn('PostgreSQL direct update failed, queued for background sync:', err);
+      }
     }
 
     return res.json({
@@ -1427,7 +1431,6 @@ export const getPatientMobileView = async (req: Request, res: Response) => {
 export const checkPatientNic = async (req: Request, res: Response) => {
   try {
     const rawNic = req.query.nic as string;
-    const tenantId = (req.query.clinicId as string) || (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string) || undefined;
     const excludeId = req.query.excludeId ? normalizeId(req.query.excludeId as string) : undefined;
 
     if (!rawNic || !rawNic.trim()) {
@@ -1436,8 +1439,8 @@ export const checkPatientNic = async (req: Request, res: Response) => {
 
     const cleanNic = rawNic.trim().toUpperCase();
 
-    // 1. Check Local Encrypted DB
-    const localDup = localEncryptedDb.getByNic(cleanNic, tenantId);
+    // 1. Check Local Encrypted DB (universal NIC lookup)
+    const localDup = localEncryptedDb.getByNic(cleanNic);
     if (localDup && (!excludeId || localDup.id !== excludeId)) {
       return res.json({
         success: true,
@@ -1452,14 +1455,14 @@ export const checkPatientNic = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. Check Cloud PostgreSQL
+    // 2. Check Cloud PostgreSQL (universal NIC lookup)
     try {
       const isOnline = await probePostgres();
       if (isOnline) {
         const client = await pool.connect();
         const pgRes = await client.query(
-          `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 AND (tenant_id = $2 OR $2 IS NULL) LIMIT 1`,
-          [cleanNic, tenantId]
+          `SELECT id, name, nic_no, tenant_id FROM patients WHERE UPPER(TRIM(nic_no)) = $1 LIMIT 1`,
+          [cleanNic]
         );
         client.release();
         if (pgRes.rows.length > 0) {
