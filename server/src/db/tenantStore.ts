@@ -61,7 +61,7 @@ class TenantStore {
         ORDER BY name ASC
       `);
 
-      if (res.rows.length > 0) {
+      if (res && Array.isArray(res.rows)) {
         // Cache tenants into local encrypted vault
         localStaffVault.saveTenants(res.rows);
 
