@@ -1,7 +1,7 @@
-# Base image with Node.js 20 and Python 3
-FROM node:20-bookworm-slim AS base
+# Base image with Node.js 22 and Python 3
+FROM node:22-bookworm-slim AS base
 
-# Install Python 3 and build tools
+# Install Python 3, venv, and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -15,10 +15,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# 2. Setup Python environment for ML
+# 2. Setup Python environment and install ML packages (including imbalanced-learn)
 COPY ml/requirements.txt ./ml/requirements.txt
 RUN python3 -m venv /app/venv && \
-    /app/venv/bin/pip install --no-cache-dir -r ./ml/requirements.txt || true
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /app/venv/bin/pip install --no-cache-dir -r ./ml/requirements.txt
 
 # 3. Copy source code and build TypeScript
 COPY . .
@@ -31,7 +32,7 @@ ENV PATH="/app/venv/bin:$PATH"
 
 EXPOSE 5000
 
-# Persist SQLite databases
+# Persist encrypted databases
 VOLUME ["/app/data"]
 
 CMD ["npm", "start"]

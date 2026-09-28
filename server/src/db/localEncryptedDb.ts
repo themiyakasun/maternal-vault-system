@@ -120,7 +120,7 @@ function decryptAndLoad(): Patient[] {
 
     return JSON.parse(decrypted);
   } catch (err) {
-    console.error('⚠️  Failed to decrypt local database (corrupted or wrong key). Re-initializing fresh empty store:', err);
+    console.warn('⚠️  Could not decrypt existing local database (station key changed or fresh deployment). Initializing fresh store.');
     encryptAndSave(initialSeedPatients);
     return [...initialSeedPatients];
   }

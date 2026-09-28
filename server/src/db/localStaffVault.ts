@@ -183,8 +183,14 @@ function decryptAndLoadVault(): VaultData {
 
     return JSON.parse(decrypted);
   } catch (err) {
-    console.error('Failed to decrypt local staff vault, initializing fresh cache:', err);
-    return getInitialSeedVault();
+    console.warn('⚠️  Could not decrypt existing staff vault (station key changed or fresh deployment). Re-encrypting fresh default staff vault with active station key.');
+    const initial = getInitialSeedVault();
+    try {
+      encryptAndSaveVault(initial);
+    } catch (saveErr) {
+      console.warn('Could not persist re-encrypted staff vault:', saveErr);
+    }
+    return initial;
   }
 }
 
