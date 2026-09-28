@@ -317,7 +317,159 @@ async function upsertToPostgres(p: Patient): Promise<void> {
 }
 
 /**
- * Push pending/un-synced local records up into PostgreSQL (Checks connection before push)
+ * Delete a patient from PostgreSQL
+ */
+export async function deleteFromPostgres(id: string, tenantId?: string): Promise<boolean> {
+  try {
+    const client = await pool.connect();
+    if (tenantId && tenantId !== 'all') {
+      await client.query('DELETE FROM patients WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+    } else {
+      await client.query('DELETE FROM patients WHERE id = $1', [id]);
+    }
+    client.release();
+    return true;
+  } catch (err) {
+    console.error(`Failed to delete patient ${id} from PostgreSQL:`, err);
+    return false;
+  }
+}
+
+/**
+ * Helper to map PostgreSQL row back to Patient object
+ */
+function mapPostgresRowToPatient(row: any): Patient {
+  const parseJson = (val: any, fallback: any) => {
+    if (!val) return fallback;
+    if (typeof val === 'object') return val;
+    try {
+      return JSON.parse(val);
+    } catch {
+      return fallback;
+    }
+  };
+
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    clinicId: row.tenant_id,
+    name: row.name,
+    initials: row.initials || 'PT',
+    initialsColor: row.initials_color || 'bg-[#d1fae5] text-[#065f46] border border-[#a7f3d0]',
+    age: Number(row.age),
+    dob: row.dob || undefined,
+    phone: row.phone || undefined,
+    nicNo: row.nic_no || undefined,
+    gravida: Number(row.gravida || 1),
+    para: Number(row.para || 0),
+    livingChildren: row.living_children != null ? Number(row.living_children) : undefined,
+    abortions: row.abortions != null ? Number(row.abortions) : undefined,
+    gestationalWeeks: Number(row.gestational_weeks || 12),
+    gestationalDays: Number(row.gestational_days || 0),
+    trimester: (Number(row.trimester) as 1 | 2 | 3) || 1,
+    bpSystolic: Number(row.bp_systolic),
+    bpDiastolic: Number(row.bp_diastolic),
+    isBpAlert: Boolean(row.is_bp_alert),
+    bmi: Number(row.bmi || 22.0),
+    bmiCategory: row.bmi_category || 'Normal',
+    bmiStatusClass: row.bmi_status_class || 'normal',
+    riskTier: row.risk_tier || 'low',
+    riskTitle: row.risk_title || 'LOW RISK',
+    riskSubtitle: row.risk_subtitle || undefined,
+    pretermProbability: Number(row.preterm_probability || 10),
+    alertHeadline: row.alert_headline || undefined,
+    alertDetails: row.alert_details || undefined,
+    featureWeights: parseJson(row.feature_weights, []),
+    mlRiskAssessment: parseJson(row.ml_risk_assessment, undefined),
+    notes: row.notes || undefined,
+    village: row.village || undefined,
+    locality: row.locality || undefined,
+    abhaId: row.abha_id || undefined,
+    bloodGroup: row.blood_group || undefined,
+    registrationDate: row.registration_date ? new Date(row.registration_date).toISOString().split('T')[0] : undefined,
+    edd: row.edd || undefined,
+    lmp: row.lmp || undefined,
+    poaAtBooking: row.poa_at_booking || undefined,
+    heightCm: row.height_cm != null ? Number(row.height_cm) : undefined,
+    weightKg: row.weight_kg != null ? Number(row.weight_kg) : undefined,
+    partnerName: row.partner_name || undefined,
+    partnerAge: row.partner_age != null ? Number(row.partner_age) : undefined,
+    partnerOccupation: row.partner_occupation || undefined,
+    mohArea: row.moh_area || undefined,
+    phmRegisterNo: row.phm_register_no || undefined,
+    fundalHeight: row.fundal_height || undefined,
+    isFundalAlert: Boolean(row.is_fundal_alert),
+    hb: row.hb != null ? Number(row.hb) : undefined,
+    isHbAlert: Boolean(row.is_hb_alert),
+    fhr: row.fhr || undefined,
+    isFhrAlert: Boolean(row.is_fhr_alert),
+    intendedHospital: row.intended_hospital || undefined,
+    emergencyTransportReady: Boolean(row.emergency_transport_ready),
+    medicalHistory: parseJson(row.medical_history, {}),
+    labResults: parseJson(row.lab_results, {}),
+    immunization: parseJson(row.immunization, {}),
+    pastObstetricHistory: parseJson(row.past_obstetric_history, []),
+    ancVisits: parseJson(row.anc_visits, []),
+    syncStatus: 'synced-p2p',
+    syncNode: 'Central PostgreSQL',
+    syncProtocol: 'PostgreSQL Real-Time Synchronized',
+    assessedBy: row.assessed_by || undefined,
+    assessedTime: row.assessed_time || undefined,
+    assessedLocation: row.assessed_location || undefined,
+    specificCondition: row.specific_condition || undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+  };
+}
+
+/**
+ * Pull updated patients downstream from PostgreSQL into Local Encrypted DB
+ */
+export async function syncDownstreamFromPostgres(tenantId?: string): Promise<{ pulledCount: number; deletedCount: number }> {
+  let pulledCount = 0;
+  let deletedCount = 0;
+  const activeTenant = tenantId && tenantId !== 'all' ? tenantId : undefined;
+
+  try {
+    const client = await pool.connect();
+    const query = activeTenant
+      ? 'SELECT * FROM patients WHERE tenant_id = $1 ORDER BY updated_at DESC'
+      : 'SELECT * FROM patients ORDER BY updated_at DESC';
+    const params = activeTenant ? [activeTenant] : [];
+    const res = await client.query(query, params);
+    client.release();
+
+    const remotePatients = res.rows.map(mapPostgresRowToPatient);
+    const remoteIdSet = new Set(remotePatients.map(p => p.id));
+
+    // 1. Upsert remote records into localEncryptedDb
+    for (const remotePatient of remotePatients) {
+      const updated = localEncryptedDb.upsertFromRemote(remotePatient);
+      if (updated) pulledCount++;
+    }
+
+    // 2. Reconcile deletions: remove local synced records that no longer exist in PostgreSQL for this tenant
+    const localList = localEncryptedDb.getAll(activeTenant).data;
+    for (const localP of localList) {
+      if (localP.syncStatus === 'synced-p2p' && !remoteIdSet.has(localP.id)) {
+        localEncryptedDb.deleteFromRemote(localP.id);
+        deletedCount++;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to pull patients downstream from PostgreSQL:', err);
+  }
+
+  return { pulledCount, deletedCount };
+}
+
+export { upsertToPostgres };
+
+/**
+ * Full Bidirectional Sync:
+ * 1. Push pending local deletions to PostgreSQL
+ * 2. Push pending local inserts/updates to PostgreSQL
+ * 3. Pull newest updates from PostgreSQL into Local Encrypted DB
  */
 export async function syncLocalToPostgres(tenantId?: string): Promise<{
   success: boolean;
@@ -342,26 +494,27 @@ export async function syncLocalToPostgres(tenantId?: string): Promise<{
     };
   }
 
-  // 2. Identify pending records
   const activeTenant = tenantId && tenantId !== 'all' ? tenantId : undefined;
+
+  // 2. Process pending deletions to PostgreSQL
+  const pendingDeletions = localEncryptedDb.getPendingDeletions().filter(d => {
+    if (!activeTenant) return true;
+    return (d.tenantId || 'clinic-4b-rampur') === activeTenant;
+  });
+
+  for (const d of pendingDeletions) {
+    const ok = await deleteFromPostgres(d.id, d.tenantId);
+    if (ok) {
+      localEncryptedDb.clearPendingDeletion(d.id);
+    }
+  }
+
+  // 3. Identify and push pending local records to PostgreSQL
   const pending = localEncryptedDb.getPendingSync().filter(p => {
     if (!activeTenant) return true;
     return (p.tenantId || p.clinicId || 'clinic-4b-rampur') === activeTenant;
   });
 
-  if (pending.length === 0) {
-    lastSuccessfulSync = new Date().toISOString();
-    return {
-      success: true,
-      syncedCount: 0,
-      pendingCount: 0,
-      totalSyncedInDb: connStatus.postgresTenantPatients,
-      message: 'All local records for this clinic are already fully synchronized with the Central PostgreSQL database.',
-      connectionStatus: connStatus,
-    };
-  }
-
-  // 3. Push each record to PostgreSQL
   let syncedCount = 0;
   for (const patient of pending) {
     try {
@@ -373,8 +526,11 @@ export async function syncLocalToPostgres(tenantId?: string): Promise<{
     }
   }
 
+  // 4. Pull downstream updates from PostgreSQL into Local Encrypted DB
+  const downstream = await syncDownstreamFromPostgres(tenantId);
+
   lastSuccessfulSync = new Date().toISOString();
-  console.log(`📡 Central DB Sync completed: ${syncedCount} records pushed from Local Encrypted DB to PostgreSQL.`);
+  console.log(`📡 Bidirectional Sync completed: ${syncedCount} pushed, ${downstream.pulledCount} pulled, ${downstream.deletedCount} remote deletions.`);
 
   // Get refreshed status
   const refreshedStatus = await checkConnectionAndStatus(tenantId);
@@ -384,33 +540,29 @@ export async function syncLocalToPostgres(tenantId?: string): Promise<{
     syncedCount,
     pendingCount: refreshedStatus.localPendingRecords,
     totalSyncedInDb: refreshedStatus.postgresTenantPatients,
-    message: `Successfully pushed ${syncedCount} patient record(s) to Central PostgreSQL Database.`,
+    message: `Synchronized successfully: ${syncedCount} pushed, ${downstream.pulledCount} pulled from Central PostgreSQL.`,
     connectionStatus: refreshedStatus,
   };
 }
 
 /**
- * Background auto-sync daemon
+ * Background auto-sync daemon (runs every 10 seconds for real-time multi-device sync)
  */
-export function startBackgroundSyncWorker(intervalMs = 20000): void {
+export function startBackgroundSyncWorker(intervalMs = 10000): void {
   if (syncWorkerTimer) clearInterval(syncWorkerTimer);
 
   syncWorkerTimer = setInterval(async () => {
     const online = await probePostgres();
     if (online) {
-      // 1. Push pending local patient records to PostgreSQL if any
-      const pending = localEncryptedDb.getPendingSync();
-      if (pending.length > 0) {
-        console.log(`🔄 Network detected! Auto-syncing ${pending.length} pending local records to PostgreSQL...`);
-        await syncLocalToPostgres();
-      }
+      // 1. Perform bidirectional sync for patient records
+      await syncLocalToPostgres();
 
-      // 2. Automatically sync any new/updated clinics or staff credentials from PostgreSQL into local encrypted DB
+      // 2. Automatically sync any new/updated clinics or staff credentials from PostgreSQL
       await tenantStore.syncAllFromCloud();
     }
   }, intervalMs);
 
-  console.log(`⚙️  Opportunistic Background Sync Worker active (polling interval: ${intervalMs / 1000}s).`);
+  console.log(`⚙️  Real-Time Bidirectional Sync Worker active (polling interval: ${intervalMs / 1000}s).`);
 }
 
 /**

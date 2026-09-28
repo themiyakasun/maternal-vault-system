@@ -25,6 +25,8 @@ const initialSeedPatients: Patient[] = [];
 
 // In-Memory RAM Cache of the Decrypted Database
 let localPatientsCache: Patient[] = [];
+let pendingDeletions: Array<{ id: string; tenantId?: string }> = [];
+let dbRevision = 1;
 let dbMeta = {
   encryptedAt: new Date().toISOString(),
   checksum: '',
@@ -203,6 +205,7 @@ export const localEncryptedDb = {
   // Insert a new patient
   insert(patient: Patient): Patient {
     localPatientsCache.unshift(patient);
+    dbRevision++;
     encryptAndSave(localPatientsCache);
     return patient;
   },
@@ -219,6 +222,7 @@ export const localEncryptedDb = {
     };
 
     localPatientsCache[idx] = updated;
+    dbRevision++;
     encryptAndSave(localPatientsCache);
     return updated;
   },
@@ -308,6 +312,7 @@ export const localEncryptedDb = {
     };
 
     localPatientsCache[idx] = updatedPatient;
+    dbRevision++;
     encryptAndSave(localPatientsCache);
 
     return { patient: updatedPatient, visit: newVisit };
@@ -318,14 +323,82 @@ export const localEncryptedDb = {
     const idx = localPatientsCache.findIndex(p => p.id === id);
     if (idx === -1) return false;
 
+    const patient = localPatientsCache[idx];
+    pendingDeletions.push({
+      id: patient.id,
+      tenantId: patient.tenantId || patient.clinicId || 'clinic-4b-rampur',
+    });
+
     localPatientsCache.splice(idx, 1);
+    dbRevision++;
     encryptAndSave(localPatientsCache);
     return true;
+  },
+
+  // Reconcile patient upserted from remote PostgreSQL (downstream sync)
+  upsertFromRemote(remotePatient: Patient): boolean {
+    const idx = localPatientsCache.findIndex(p => p.id === remotePatient.id);
+    const normalized: Patient = {
+      ...remotePatient,
+      syncStatus: 'synced-p2p',
+      syncNode: 'Central PostgreSQL',
+      syncProtocol: 'PostgreSQL Real-Time Synchronized',
+    };
+
+    if (idx === -1) {
+      localPatientsCache.unshift(normalized);
+      dbRevision++;
+      encryptAndSave(localPatientsCache);
+      return true;
+    }
+
+    const local = localPatientsCache[idx];
+    // If local has offline changes, don't overwrite unless remote is newer
+    if (local.syncStatus === 'updated-local') {
+      const localTime = new Date(local.updatedAt || 0).getTime();
+      const remoteTime = new Date(remotePatient.updatedAt || 0).getTime();
+      if (remoteTime <= localTime) {
+        return false; // Keep local unpushed change
+      }
+    }
+
+    localPatientsCache[idx] = normalized;
+    dbRevision++;
+    encryptAndSave(localPatientsCache);
+    return true;
+  },
+
+  // Delete patient removed from remote PostgreSQL (downstream deletion)
+  deleteFromRemote(id: string): boolean {
+    const idx = localPatientsCache.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+
+    localPatientsCache.splice(idx, 1);
+    dbRevision++;
+    encryptAndSave(localPatientsCache);
+    return true;
+  },
+
+  // Get current DB revision counter
+  getRevision(): number {
+    return dbRevision;
+  },
+
+  // Get pending deletions for PostgreSQL sync
+  getPendingDeletions(): Array<{ id: string; tenantId?: string }> {
+    return [...pendingDeletions];
+  },
+
+  // Clear pending deletion after successful push to PostgreSQL
+  clearPendingDeletion(id: string): void {
+    pendingDeletions = pendingDeletions.filter(d => d.id !== id);
   },
 
   // Clear all data (reset for fresh manual entry)
   clearAll(): void {
     localPatientsCache = [];
+    pendingDeletions = [];
+    dbRevision++;
     encryptAndSave(localPatientsCache);
   },
 

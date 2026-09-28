@@ -30,7 +30,6 @@ import { EmergencyEscalationWidget } from './components/PatientRecords/BottomWid
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MidwifeLoginModal } from './components/Auth/MidwifeLoginModal';
-import { mockMeshNodes } from './data/mockData';
 import { patientApi } from './services/patientApi';
 import { formatDbDate } from './utils/dateUtils';
 import type { Patient, FilterTab, ANCVisitInput, ANCVisit } from './types/triage';
@@ -42,7 +41,6 @@ import {
   Plus, 
   CheckCircle2, 
   Download,
-  Tablet,
   ShieldCheck,
   HeartPulse,
   Activity,
@@ -64,35 +62,56 @@ function DashboardContent() {
     let isMounted = true;
     const cid = currentClinic?.id || 'clinic-4b-rampur';
 
-    // Fetch scoped patients directly from the Local Encrypted Database API
-    const fetchClinicPatients = async () => {
+    // Fetch scoped patients with real-time multi-device synchronization
+    const fetchClinicPatients = async (silent = false) => {
       try {
         if (cid) {
           const res = await patientApi.getAllPatients(cid);
           if (isMounted && res?.data) {
             const serverList: Patient[] = res.data;
-            setPatients(serverList);
-            if (serverList.length > 0) {
-              setSelectedPatientId((prev) => (prev && serverList.some(p => p.id === prev) ? prev : serverList[0].id));
-            } else {
-              setSelectedPatientId('');
-            }
+            setPatients((prev) => {
+              // Avoid re-rendering if data is identical
+              if (
+                prev.length === serverList.length &&
+                prev.every((p, idx) => p.id === serverList[idx]?.id && p.updatedAt === serverList[idx]?.updatedAt)
+              ) {
+                return prev;
+              }
+              return serverList;
+            });
+
+            setSelectedPatientId((prev) => {
+              if (prev && serverList.some((p) => p.id === prev)) {
+                return prev;
+              }
+              return serverList.length > 0 ? serverList[0].id : '';
+            });
             return;
           }
         }
       } catch (err) {
-        console.warn('Local Encrypted Database API unreachable:', err);
+        if (!silent) {
+          console.warn('Local Encrypted Database API unreachable:', err);
+        }
       }
 
-      if (isMounted) {
+      if (isMounted && !silent) {
         setPatients([]);
         setSelectedPatientId('');
       }
     };
 
     fetchClinicPatients();
+
+    // Real-Time Multi-Device Polling Interval (every 4 seconds)
+    // Synchronizes changes across other tablets and the main PostgreSQL system
+    const syncInterval = setInterval(() => {
+      fetchClinicPatients(true);
+    }, 4000);
+
     return () => {
       isMounted = false;
+      clearInterval(syncInterval);
     };
   }, [currentClinic?.id]);
 
@@ -214,9 +233,10 @@ function DashboardContent() {
       setSelectedVisitPatient(null);
     }
 
-    // 3. Remove from backend AES-256-GCM encrypted database
+    // 3. Remove from backend AES-256-GCM encrypted database & PostgreSQL
     try {
-      await patientApi.deletePatient(patientId);
+      const cid = currentClinic?.id || 'clinic-4b-rampur';
+      await patientApi.deletePatient(patientId, cid);
     } catch (err) {
       console.warn('Backend API delete error:', err);
     }
@@ -232,9 +252,10 @@ function DashboardContent() {
       // 1. Send to backend encrypted local DB
       let updatedFromBackend: Patient | null = null;
       let newVisitRecord: ANCVisit | null = null;
+      const cid = currentClinic?.id || 'clinic-4b-rampur';
 
       try {
-        const res = await patientApi.addPatientClinicVisit(patientId, visitData);
+        const res = await patientApi.addPatientClinicVisit(patientId, visitData, cid);
         if (res?.success && res?.data?.patient) {
           updatedFromBackend = res.data.patient;
           newVisitRecord = res.data.visit;
@@ -368,9 +389,10 @@ function DashboardContent() {
     setSelectedPatientId(newPatient.id);
     showToast(`Mother ${newPatient.name} registered in encrypted vault.`);
 
-    // 2. Persist to server AES-256-GCM encrypted database
+    // 2. Persist to server AES-256-GCM encrypted database & PostgreSQL
     try {
-      const res = await patientApi.createPatient(newPatient);
+      const cid = currentClinic?.id || 'clinic-4b-rampur';
+      const res = await patientApi.createPatient(newPatient, cid);
       if (res?.success && res?.data) {
         const serverPatient: Patient = res.data;
         setPatients((prev) => {
@@ -665,18 +687,18 @@ function DashboardContent() {
                   onOpenQR={handleOpenQR}
                 />
 
-                <P2PMeshPanel nodes={mockMeshNodes} />
+                <P2PMeshPanel onTriggerSync={handleTriggerSync} isSyncing={isSyncing} />
               </div>
             </div>
           </main>
         ) : activeNavTab === 'mesh-logs' ? (
-          /* =================== CONNECTED CLINIC TABLETS & SYNC STATUS =================== */
+          /* =================== SYSTEM SYNCHRONIZATION & CLOUD RECONCILIATION =================== */
           <main className="flex-1 p-3.5 sm:p-6 pb-24 md:pb-6 space-y-4 sm:space-y-5 max-w-[1440px] mx-auto w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a]">Clinic Tablets & Team Sync Status</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a]">System Synchronization & Cloud Reconciliation</h1>
                 <p className="text-xs text-[#64748b] mt-0.5">
-                  Direct connection with nearby PHM tablets, Sub-Center station, and emergency ambulance
+                  Real-time bidirectional synchronization with central PostgreSQL server for {currentClinic?.name || 'Clinic'}
                 </p>
               </div>
               <button
@@ -684,7 +706,7 @@ function DashboardContent() {
                 className="flex items-center gap-2 bg-[#006194] hover:bg-[#004f7b] text-white px-4 py-2 rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>Sync With Nearby Tablets Now</span>
+                <span>Reconcile With Central Database</span>
               </button>
             </div>
 
@@ -692,57 +714,53 @@ function DashboardContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#047857] mb-1">
-                  <Tablet className="w-4 h-4 text-[#16a34a]" />
-                  <span>Nearby Midwife Tablets</span>
+                  <ShieldCheck className="w-4 h-4 text-[#16a34a]" />
+                  <span>Central Cloud Database</span>
                 </div>
-                <div className="text-2xl font-bold text-[#0f172a] mt-1">2 Connected</div>
-                <p className="text-[11px] text-[#64748b] mt-1">Sister Sunita & Sister Anjali (Direct Wireless)</p>
+                <div className="text-2xl font-bold text-[#0f172a] mt-1">Connected</div>
+                <p className="text-[11px] text-[#64748b] mt-1">Bidirectional sync active (PostgreSQL Engine)</p>
               </div>
 
               <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#006194] mb-1">
-                  <ShieldCheck className="w-4 h-4 text-[#0284c7]" />
-                  <span>Sub-Center Base Station</span>
+                  <Activity className="w-4 h-4 text-[#0284c7]" />
+                  <span>Clinic Data Partition</span>
                 </div>
-                <div className="text-2xl font-bold text-[#0f172a] mt-1">Synchronized</div>
-                <p className="text-[11px] text-[#64748b] mt-1">Primary Health Post 4B (Last synced 3m ago)</p>
+                <div className="text-lg font-bold text-[#0f172a] mt-1 truncate">{currentClinic?.name || 'Default Clinic'}</div>
+                <p className="text-[11px] text-[#64748b] mt-1 font-mono">Tenant ID: {currentClinic?.id || 'clinic-ambagamuwa'}</p>
               </div>
 
               <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-xs">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#b45309] mb-1">
-                  <Activity className="w-4 h-4 text-[#f59e0b]" />
-                  <span>Emergency Ambulance</span>
+                <div className="flex items-center gap-2 text-xs font-bold text-[#0f766e] mb-1">
+                  <CheckCircle2 className="w-4 h-4 text-[#0d9488]" />
+                  <span>Synchronized Records</span>
                 </div>
-                <div className="text-2xl font-bold text-[#0f172a] mt-1">Within Range</div>
-                <p className="text-[11px] text-[#64748b] mt-1">Ambulance Unit AMB-04 (~180m away)</p>
+                <div className="text-2xl font-bold text-[#0f172a] mt-1">{patients.length} Patient Vaults</div>
+                <p className="text-[11px] text-[#64748b] mt-1">Continuous 4s cross-device synchronization</p>
               </div>
             </div>
 
             {/* Friendly Activity Feed */}
             <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 sm:p-5 space-y-3 shadow-xs">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <span className="text-xs font-bold text-[#0f172a]">Recent Clinic Record Sync Activity</span>
+                <span className="text-xs font-bold text-[#0f172a]">Live Synchronization Telemetry</span>
                 <span className="text-[#047857] text-[11px] sm:text-xs font-semibold flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Auto-saved on tablet
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Real-time active
                 </span>
               </div>
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0]">
                   <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0" />
-                  <span><strong>10:42 AM:</strong> Synchronized 6 maternal health records with Sister Sunita's tablet.</span>
+                  <span><strong>Central Database:</strong> Connected to PostgreSQL server. All local updates stream directly to the cloud.</span>
                 </div>
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[#f0f9ff] text-[#0369a1] border border-[#bae6fd]">
-                  <CheckCircle2 className="w-4 h-4 text-[#0284c7] shrink-0" />
-                  <span><strong>10:41 AM:</strong> Sub-center gateway updated with latest ANC visit data.</span>
-                </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[#fefce8] text-[#854d0e] border border-[#fef08a]">
-                  <Activity className="w-4 h-4 text-[#ca8a04] shrink-0" />
-                  <span><strong>10:40 AM:</strong> Emergency Ambulance Team AMB-04 in wireless range.</span>
+                  <ShieldCheck className="w-4 h-4 text-[#0284c7] shrink-0" />
+                  <span><strong>Tenant Security:</strong> Strict partition isolation enforced for clinic {currentClinic?.name || 'Ambagamuwa MOH'}.</span>
                 </div>
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[#f8fafc] text-[#334155] border border-[#e2e8f0]">
-                  <ShieldCheck className="w-4 h-4 text-[#64748b] shrink-0" />
-                  <span><strong>10:39 AM:</strong> All 142 local patient records encrypted and safely backed up on tablet.</span>
+                  <Activity className="w-4 h-4 text-[#64748b] shrink-0" />
+                  <span><strong>Cross-Device Sync:</strong> Any updates made on any synced device or the central database are propagated automatically.</span>
                 </div>
               </div>
             </div>
@@ -912,7 +930,6 @@ function DashboardContent() {
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         patients={patients}
-        meshNodes={mockMeshNodes}
       />
 
       <PatientEHRModal

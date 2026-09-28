@@ -6,14 +6,13 @@ interface ExportSummaryModalProps {
   isOpen: boolean;
   onClose: () => void;
   patients: Patient[];
-  meshNodes: MeshNode[];
+  meshNodes?: MeshNode[];
 }
 
 export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
   isOpen,
   onClose,
   patients,
-  meshNodes,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
 
@@ -26,14 +25,12 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
 
     if (format === 'json') {
       const exportData = {
-        clinic: 'Sub-District Clinic 4B',
-        nodeId: 'PHM-MUM-71',
+        clinic: 'Clinic Station',
         exportedAt: new Date().toISOString(),
-        encryption: 'ChaCha20-Poly1305',
+        encryption: 'AES-256-GCM / PBKDF2',
         totalPatients: patients.length,
         criticalCount: patients.filter((p) => p.riskTier === 'high').length,
         patients,
-        meshNodes,
       };
       content = JSON.stringify(exportData, null, 2);
       filename = `MaternaVault_Triage_Summary_${new Date().toISOString().slice(0, 10)}.json`;
@@ -125,7 +122,7 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
             >
               <Download className="w-5 h-5 text-[#006194] mb-1.5" />
               <span className="text-xs font-bold text-[#0f172a]">Encrypted JSON</span>
-              <span className="text-[10px] text-[#64748b]">For mesh peer nodes</span>
+              <span className="text-[10px] text-[#64748b]">Encrypted clinic backup</span>
             </button>
 
             <button

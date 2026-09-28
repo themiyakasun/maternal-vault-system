@@ -55,10 +55,14 @@ export const patientApi = {
   },
 
   // Create new patient
-  async createPatient(data: Partial<Patient>) {
+  async createPatient(data: Partial<Patient>, tenantId?: string) {
+    const tid = tenantId || data.tenantId || data.clinicId || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (tid) headers['x-tenant-id'] = tid;
+
     const res = await fetch(`${API_BASE}/patients`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
@@ -66,11 +70,14 @@ export const patientApi = {
   },
 
   // Add Antenatal Clinic (ANC) visit for patient
-  async addPatientClinicVisit(id: string, visitData: ANCVisitInput) {
+  async addPatientClinicVisit(id: string, visitData: ANCVisitInput, tenantId?: string) {
     const encodedId = encodeURIComponent(id);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (tenantId) headers['x-tenant-id'] = tenantId;
+
     const res = await fetch(`${API_BASE}/patients/${encodedId}/visits`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(visitData),
     });
@@ -78,11 +85,15 @@ export const patientApi = {
   },
 
   // Update existing patient
-  async updatePatient(id: string, data: Partial<Patient>) {
+  async updatePatient(id: string, data: Partial<Patient>, tenantId?: string) {
     const encodedId = encodeURIComponent(id);
+    const tid = tenantId || data.tenantId || data.clinicId || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (tid) headers['x-tenant-id'] = tid;
+
     const res = await fetch(`${API_BASE}/patients/${encodedId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
@@ -90,10 +101,15 @@ export const patientApi = {
   },
 
   // Delete patient
-  async deletePatient(id: string) {
+  async deletePatient(id: string, tenantId?: string) {
     const encodedId = encodeURIComponent(id);
-    const res = await fetch(`${API_BASE}/patients/${encodedId}`, {
+    const headers: Record<string, string> = {};
+    if (tenantId) headers['x-tenant-id'] = tenantId;
+    const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+
+    const res = await fetch(`${API_BASE}/patients/${encodedId}${query}`, {
       method: 'DELETE',
+      headers,
       credentials: 'include',
     });
     return res.json();

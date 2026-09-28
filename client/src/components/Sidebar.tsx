@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Users, 
   HeartPulse, 
-  Wifi, 
+  Database, 
   BookOpen, 
   Sliders, 
   ShieldCheck,
@@ -28,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'records', label: 'Maternal Records', icon: Users },
     { id: 'triage', label: 'Priority Care Queue', icon: HeartPulse },
-    { id: 'mesh-logs', label: 'Clinic Sync & Devices', icon: Wifi },
+    { id: 'mesh-logs', label: 'System & Cloud Sync', icon: Database },
     { id: 'diagnostics', label: 'Clinical Health Guides', icon: BookOpen },
     { id: 'settings', label: 'Clinic Settings', icon: Sliders },
   ];

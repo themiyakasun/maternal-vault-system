@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import QRCode from 'qrcode';
 import zlib from 'zlib';
 import { localEncryptedDb } from '../db/localEncryptedDb.js';
-import { syncLocalToPostgres, probePostgres } from '../services/syncService.js';
+import { probePostgres, upsertToPostgres, deleteFromPostgres } from '../services/syncService.js';
 import { evaluatePatientRisk } from '../services/mlRiskService.js';
 import type { Patient, CreatePatientInput, UpdatePatientInput, ANCVisitInput } from '../types/patient.js';
 
@@ -40,6 +40,7 @@ export const getAllPatients = async (req: Request, res: Response) => {
       success: true,
       total: result.total,
       data: result.data,
+      revision: localEncryptedDb.getRevision(),
       tenantId: effectiveTenantId || 'all',
       storage: 'Local Encrypted DB (AES-256-GCM)',
     });
@@ -207,10 +208,15 @@ export const createPatient = async (req: Request, res: Response) => {
     // 1. Write first to local encrypted database
     localEncryptedDb.insert(newPatient);
 
-    // 2. Opportunistically sync to PostgreSQL in background if network is available
-    probePostgres().then(online => {
+    // 2. Immediately push to PostgreSQL if online so other devices receive it immediately
+    probePostgres().then(async online => {
       if (online) {
-        syncLocalToPostgres().catch(err => console.warn('Background sync warning:', err));
+        try {
+          await upsertToPostgres(newPatient);
+          localEncryptedDb.markSynced(newPatient.id);
+        } catch (err) {
+          console.warn('PostgreSQL direct upsert failed, queued for background sync:', err);
+        }
       }
     });
 
@@ -274,12 +280,19 @@ export const updatePatient = async (req: Request, res: Response) => {
 
     const updated = localEncryptedDb.update(id, merged);
 
-    // Opportunistically sync to PostgreSQL in background if online
-    probePostgres().then(online => {
-      if (online) {
-        syncLocalToPostgres().catch(err => console.warn('Background sync warning:', err));
-      }
-    });
+    // Immediately push to PostgreSQL if online so other devices receive it immediately
+    if (updated) {
+      probePostgres().then(async online => {
+        if (online) {
+          try {
+            await upsertToPostgres(updated);
+            localEncryptedDb.markSynced(updated.id);
+          } catch (err) {
+            console.warn('PostgreSQL direct update failed, queued for background sync:', err);
+          }
+        }
+      });
+    }
 
     return res.json({
       success: true,
@@ -341,15 +354,28 @@ export const deletePatient = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Patient ID is required' });
     }
     const id = normalizeId(decodeURIComponent(rawId));
+    const tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string) || undefined;
 
     const deleted = localEncryptedDb.delete(id);
     if (!deleted) {
       return res.status(404).json({ success: false, message: `Patient with ID ${id} not found` });
     }
 
+    // Immediately propagate deletion to PostgreSQL if online
+    probePostgres().then(async online => {
+      if (online) {
+        try {
+          const ok = await deleteFromPostgres(id, tenantId);
+          if (ok) localEncryptedDb.clearPendingDeletion(id);
+        } catch (err) {
+          console.warn('PostgreSQL direct delete failed, queued for background sync:', err);
+        }
+      }
+    });
+
     return res.json({
       success: true,
-      message: `Patient ${id} deleted successfully from Local Encrypted DB.`,
+      message: `Patient ${id} deleted successfully from Local Encrypted DB and PostgreSQL.`,
     });
   } catch (error) {
     console.error('Error deleting patient:', error);
@@ -427,10 +453,15 @@ export const addPatientVisit = async (req: Request, res: Response) => {
       mlRiskAssessment: mlRisk,
     }) || result.patient;
 
-    // 3. Opportunistically sync to PostgreSQL in background if online
-    probePostgres().then(online => {
+    // 3. Immediately push to PostgreSQL if online so other devices receive it immediately
+    probePostgres().then(async online => {
       if (online) {
-        syncLocalToPostgres().catch(err => console.warn('Background sync warning:', err));
+        try {
+          await upsertToPostgres(finalPatient);
+          localEncryptedDb.markSynced(finalPatient.id);
+        } catch (err) {
+          console.warn('PostgreSQL direct visit update failed, queued for background sync:', err);
+        }
       }
     });
 

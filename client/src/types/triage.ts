@@ -147,6 +147,8 @@ export interface Patient {
   assessedTime?: string;
   assessedLocation?: string;
   specificCondition?: string;
+  createdAt?: string;
+  updatedAt?: string;
 
   // H 512 B Official Pregnancy Record Book Fields
   registrationDate?: string;
