@@ -135,7 +135,14 @@ function DashboardContent() {
       await fetchClinicPatients(true);
     };
 
+    const handleNetworkOffline = () => {
+      console.log('📡 Network disconnected - Local offline vault active');
+      setSyncToast('Device offline. Operating in local encrypted vault mode.');
+      setTimeout(() => setSyncToast(null), 4000);
+    };
+
     window.addEventListener('online', handleNetworkOnline);
+    window.addEventListener('offline', handleNetworkOffline);
 
     // Real-Time Multi-Device Polling Interval (every 4 seconds)
     // Synchronizes changes across other tablets and the main PostgreSQL system
@@ -147,6 +154,7 @@ function DashboardContent() {
       isMounted = false;
       clearInterval(syncInterval);
       window.removeEventListener('online', handleNetworkOnline);
+      window.removeEventListener('offline', handleNetworkOffline);
     };
   }, [currentClinic?.id]);
 

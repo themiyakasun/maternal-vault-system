@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, RefreshCw, Lock, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { MaternaVaultLogo } from './Common/MaternaVaultLogo';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 interface HeaderProps {
   onTriggerSync?: () => void;
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMobileMenu
 }) => {
   const { currentUser, currentClinic, lockScreen, logout } = useAuth();
+  const { isOnline } = useNetworkStatus();
   const [timeStr, setTimeStr] = useState('10:42 AM IST');
 
   useEffect(() => {
@@ -72,10 +74,22 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="truncate">{clinicName}</span>
             <span className="hidden sm:inline text-xs font-normal text-[#64748b]">• {divisionName}</span>
           </h2>
-          <p className="text-[10px] sm:text-[11px] font-medium text-[#047857] flex items-center gap-1 mt-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] inline-block shrink-0"></span>
-            <span className="truncate">Working Offline • Auto-Saving</span>
-          </p>
+          {isSyncing ? (
+            <p className="text-[10px] sm:text-[11px] font-medium text-[#0284c7] flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0284c7] animate-ping inline-block shrink-0"></span>
+              <span className="truncate">Syncing Changes...</span>
+            </p>
+          ) : isOnline ? (
+            <p className="text-[10px] sm:text-[11px] font-medium text-[#047857] flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-pulse inline-block shrink-0"></span>
+              <span className="truncate">Online • Cloud Connected</span>
+            </p>
+          ) : (
+            <p className="text-[10px] sm:text-[11px] font-medium text-[#b45309] flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] inline-block shrink-0"></span>
+              <span className="truncate">Working Offline • Auto-Saving</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -92,21 +106,29 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button 
             onClick={handleSyncClick}
-            title="Click to check connection with Central PostgreSQL database and push records"
-            className="flex items-center gap-1.5 font-semibold text-[#006194] hover:text-[#004f7b] bg-[#f0f9ff] hover:bg-[#e0f2fe] px-2.5 py-1 rounded-full border border-[#bae6fd] transition-colors cursor-pointer"
+            title={isOnline ? "Click to trigger Central DB Sync" : "System currently offline • Changes are auto-saved locally and will sync once reconnected"}
+            className={`flex items-center gap-1.5 font-semibold px-2.5 py-1 rounded-full border transition-colors cursor-pointer ${
+              isOnline 
+                ? 'text-[#006194] hover:text-[#004f7b] bg-[#f0f9ff] hover:bg-[#e0f2fe] border-[#bae6fd]' 
+                : 'text-[#92400e] bg-[#fef3c7] hover:bg-[#fde68a] border-[#fcd34d]'
+            }`}
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-[#0284c7] ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Central DB Sync'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isOnline ? 'text-[#0284c7]' : 'text-[#d97706]'} ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : isOnline ? 'Central DB Sync' : 'Offline Mode'}</span>
           </button>
         </div>
 
         {/* Mobile Quick Sync Icon Button */}
         <button
           onClick={handleSyncClick}
-          title="Central DB Sync"
-          className="sm:hidden p-1.5 text-[#006194] bg-[#f0f9ff] hover:bg-[#e0f2fe] border border-[#bae6fd] rounded-lg transition-colors cursor-pointer"
+          title={isOnline ? "Central DB Sync" : "Working Offline"}
+          className={`sm:hidden p-1.5 border rounded-lg transition-colors cursor-pointer ${
+            isOnline 
+              ? 'text-[#006194] bg-[#f0f9ff] hover:bg-[#e0f2fe] border-[#bae6fd]' 
+              : 'text-[#92400e] bg-[#fef3c7] hover:bg-[#fde68a] border-[#fcd34d]'
+          }`}
         >
-          <RefreshCw className={`w-3.5 h-3.5 text-[#0284c7] ${isSyncing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isOnline ? 'text-[#0284c7]' : 'text-[#d97706]'} ${isSyncing ? 'animate-spin' : ''}`} />
         </button>
 
 
