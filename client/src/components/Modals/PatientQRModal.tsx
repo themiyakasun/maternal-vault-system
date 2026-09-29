@@ -32,9 +32,7 @@ import {
   Baby,
   Stethoscope,
   Calendar,
-  ExternalLink,
 } from 'lucide-react';
-import { serializePatientToFHIR } from '../../utils/fhirSerializer';
 
 interface PatientQRModalProps {
   isOpen: boolean;
@@ -429,10 +427,8 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copiedJSON, setCopiedJSON] = useState<boolean>(false);
-  const [copiedFHIR, setCopiedFHIR] = useState<boolean>(false);
   const [copiedPayload, setCopiedPayload] = useState<boolean>(false);
   const [showJsonPreview, setShowJsonPreview] = useState<boolean>(false);
-  const [jsonFormatView, setJsonFormatView] = useState<'fhir' | 'maternavault'>('fhir');
   const [rawQrPayload, setRawQrPayload] = useState<string>('');
   const [activeMobileTab, setActiveMobileTab] = useState<'profile' | 'history' | 'obstetric' | 'clinic' | 'plan'>('profile');
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
@@ -441,12 +437,6 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
   const completeVaultData = useMemo(() => {
     if (!patient) return null;
     return buildCompletePatientVaultJSON(patient);
-  }, [patient]);
-
-  // Standard HL7 FHIR R4 Bundle (conforming to validator.fhir.org)
-  const fhirBundleData = useMemo(() => {
-    if (!patient) return null;
-    return serializePatientToFHIR(patient);
   }, [patient]);
 
   // Mobile Web Pass direct URL (Camera-Scannable fallback)
@@ -548,36 +538,6 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
     }
     setCopiedJSON(true);
     setTimeout(() => setCopiedJSON(false), 2500);
-  };
-
-  const handleCopyFHIR = async () => {
-    if (!fhirBundleData) return;
-    const fhirJson = JSON.stringify(fhirBundleData, null, 2);
-    try {
-      await navigator.clipboard.writeText(fhirJson);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = fhirJson;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    setCopiedFHIR(true);
-    setTimeout(() => setCopiedFHIR(false), 2500);
-  };
-
-  const handleDownloadFHIR = () => {
-    if (!fhirBundleData) return;
-    const fhirJson = JSON.stringify(fhirBundleData, null, 2);
-    const blob = new Blob([fhirJson], { type: 'application/fhir+json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `FHIR-R4-${patient.id.replace('#', '')}-${patient.name.replace(/\s+/g, '_')}-Bundle.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
   };
 
   const handleCopyPayload = async () => {
@@ -760,52 +720,6 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                 </p>
               </div>
 
-              {/* Highlighted FHIR R4 Action Banner */}
-              <div className="w-full mt-3 p-2.5 rounded-xl bg-gradient-to-r from-[#006194]/10 via-[#0284c7]/10 to-emerald-500/10 border border-[#006194]/30 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-2xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#006194] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                    R4
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-[#0f172a]">HL7 FHIR R4 Standards Payload</span>
-                      <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-300">
-                        validator.fhir.org ready
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#64748b]">
-                      Strictly conforms to international HL7 FHIR Release 4 standard (0 Errors, 0 Fatal).
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
-                  <button
-                    type="button"
-                    onClick={handleCopyFHIR}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs transition-all w-full sm:w-auto ${
-                      copiedFHIR
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-[#006194] hover:bg-[#004f7b] text-white'
-                    }`}
-                    title="Copy HL7 FHIR R4 JSON Bundle to paste into validator.fhir.org"
-                  >
-                    {copiedFHIR ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedFHIR ? 'FHIR Copied for Validator!' : 'Copy FHIR R4 JSON'}</span>
-                  </button>
-                  <a
-                    href="https://validator.fhir.org/"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="p-1.5 text-xs font-semibold text-[#006194] hover:bg-white rounded-lg border border-[#006194]/30 hover:border-[#006194] flex items-center gap-1 shrink-0 transition-colors"
-                    title="Open official validator.fhir.org in new tab"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span className="text-[11px] hidden md:inline">Validator</span>
-                  </a>
-                </div>
-              </div>
-
               {/* Action Buttons Toolbar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3">
                 <button
@@ -866,16 +780,9 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <FileJson className="w-3.5 h-3.5 text-[#006194]" />
-                    <span className="font-bold text-[#0f172a]">
-                      {jsonFormatView === 'fhir' ? 'HL7 FHIR R4 Bundle Payload' : 'MaternaVault JSON Record Payload'}
-                    </span>
+                    <span className="font-bold text-[#0f172a]">Raw JSON Record Payload</span>
                     <span className="text-[10px] text-[#64748b] font-mono bg-slate-100 px-1.5 py-0.5 rounded">
-                      {(
-                        new Blob([
-                          JSON.stringify(jsonFormatView === 'fhir' ? fhirBundleData : completeVaultData, null, 2)
-                        ]).size / 1024
-                      ).toFixed(1)}{' '}
-                      KB
+                      {((new Blob([JSON.stringify(completeVaultData, null, 2)]).size) / 1024).toFixed(1)} KB
                     </span>
                   </div>
                   <span className="text-[11px] text-[#006194] font-bold">
@@ -884,110 +791,43 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                 </button>
 
                 {showJsonPreview && (
-                  <div className="p-3 border-t border-[#e2e8f0] space-y-2.5 bg-[#0f172a] text-slate-100">
-                    {/* Format Toggle Tabs */}
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2 flex-wrap gap-2">
-                      <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/10">
-                        <button
-                          type="button"
-                          onClick={() => setJsonFormatView('fhir')}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                            jsonFormatView === 'fhir'
-                              ? 'bg-[#006194] text-white shadow-xs'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          ★ HL7 FHIR R4 Bundle
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setJsonFormatView('maternavault')}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
-                            jsonFormatView === 'maternavault'
-                              ? 'bg-[#006194] text-white shadow-xs'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          MaternaVault Schema v1.2
-                        </button>
-                      </div>
-
+                  <div className="p-3 border-t border-[#e2e8f0] space-y-2 bg-[#0f172a] text-slate-100">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-[10px] text-slate-300 font-mono">
+                        Valid Schema v1.2.0 • Ready for Import & Cloud Sync
+                      </span>
                       <div className="flex items-center gap-1.5">
-                        {jsonFormatView === 'fhir' ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={handleCopyFHIR}
-                              className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
-                              title="Copy FHIR R4 JSON Bundle"
-                            >
-                              {copiedFHIR ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedFHIR ? 'Copied!' : 'Copy FHIR JSON'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleDownloadFHIR}
-                              className="px-2.5 py-1 text-[11px] font-bold bg-[#006194] hover:bg-[#004f7b] text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
-                              title="Download .fhir.json"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>.fhir.json</span>
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={handleCopyRawJSON}
-                              className="px-2.5 py-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
-                              title="Copy formatted raw JSON string"
-                            >
-                              {copiedJSON ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedJSON ? 'Copied!' : 'Copy Raw JSON'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleCopyPayload}
-                              className="px-2 py-1 text-[11px] font-medium bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
-                              title="Copy compressed QR token string"
-                            >
-                              {copiedPayload ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedPayload ? 'Token Copied!' : 'Copy QR Token'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleDownloadJSON}
-                              className="px-2.5 py-1 text-[11px] font-bold bg-[#006194] hover:bg-[#004f7b] text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
-                              title="Download .json file"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>.json</span>
-                            </button>
-                          </>
-                        )}
+                        <button
+                          type="button"
+                          onClick={handleCopyRawJSON}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Copy formatted raw JSON string"
+                        >
+                          {copiedJSON ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedJSON ? 'Copied!' : 'Copy Raw JSON'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCopyPayload}
+                          className="px-2 py-1 text-[11px] font-medium bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Copy compressed QR token string"
+                        >
+                          {copiedPayload ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedPayload ? 'Token Copied!' : 'Copy QR Token'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadJSON}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-[#006194] hover:bg-[#004f7b] text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Download .json file"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>.json</span>
+                        </button>
                       </div>
                     </div>
-
-                    {jsonFormatView === 'fhir' ? (
-                      <div className="flex items-center justify-between text-[10.5px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded">
-                        <span>● Valid HL7 FHIR R4 Collection Bundle • Tested for validator.fhir.org</span>
-                        <a
-                          href="https://validator.fhir.org/"
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="underline hover:text-emerald-300 flex items-center gap-1 font-semibold"
-                        >
-                          Validate Online <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="text-[10.5px] text-slate-400 font-mono">
-                        Valid Schema v1.2.0 • Field offline sync & QR pass payload
-                      </div>
-                    )}
-
-                    <pre className="text-[10.5px] font-mono text-emerald-400 bg-black/50 p-2.5 rounded-lg max-h-52 overflow-y-auto overflow-x-auto leading-relaxed border border-white/10 select-all">
-                      {JSON.stringify(jsonFormatView === 'fhir' ? fhirBundleData : completeVaultData, null, 2)}
+                    <pre className="text-[10.5px] font-mono text-emerald-400 bg-black/50 p-2.5 rounded-lg max-h-48 overflow-y-auto overflow-x-auto leading-relaxed border border-white/10 select-all">
+                      {JSON.stringify(completeVaultData, null, 2)}
                     </pre>
                   </div>
                 )}
@@ -1535,23 +1375,7 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
             <span>Instant Offline QR Pass</span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <button
-              onClick={handleCopyFHIR}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors border ${
-                copiedFHIR
-                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                  : 'text-white bg-[#006194] hover:bg-[#004f7b] border-[#006194]'
-              }`}
-              title="Copy HL7 FHIR R4 JSON Bundle for validator.fhir.org"
-            >
-              {copiedFHIR ? (
-                <Check className="w-3.5 h-3.5 text-white" />
-              ) : (
-                <Copy className="w-3.5 h-3.5 text-white" />
-              )}
-              <span>{copiedFHIR ? 'FHIR Copied!' : 'Copy FHIR R4 JSON'}</span>
-            </button>
+          <div className="flex items-center gap-2">
             <button
               onClick={handleCopyRawJSON}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors border ${
