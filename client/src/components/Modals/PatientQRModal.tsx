@@ -20,6 +20,8 @@ import {
   Link,
   Globe,
   Bell,
+  FileJson,
+  Copy,
   Droplet,
   Scale,
   Ruler,
@@ -424,6 +426,10 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [copiedJSON, setCopiedJSON] = useState<boolean>(false);
+  const [copiedPayload, setCopiedPayload] = useState<boolean>(false);
+  const [showJsonPreview, setShowJsonPreview] = useState<boolean>(false);
+  const [rawQrPayload, setRawQrPayload] = useState<string>('');
   const [activeMobileTab, setActiveMobileTab] = useState<'profile' | 'history' | 'obstetric' | 'clinic' | 'plan'>('profile');
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
 
@@ -465,6 +471,7 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
 
         if (isMounted) {
           setQrDataUrl(url);
+          setRawQrPayload(compressed);
           setIsGenerating(false);
         }
       } catch (err) {
@@ -478,6 +485,7 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
           });
           if (isMounted) {
             setQrDataUrl(url);
+            setRawQrPayload(mobilePassUrl);
           }
         } catch (innerErr) {
           console.error('Fatal QR generation error:', innerErr);
@@ -513,6 +521,53 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     }
+  };
+
+  const handleCopyRawJSON = async () => {
+    if (!completeVaultData) return;
+    const rawJson = JSON.stringify(completeVaultData, null, 2);
+    try {
+      await navigator.clipboard.writeText(rawJson);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = rawJson;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedJSON(true);
+    setTimeout(() => setCopiedJSON(false), 2500);
+  };
+
+  const handleCopyPayload = async () => {
+    const payloadToCopy = rawQrPayload || (completeVaultData ? JSON.stringify(compressVaultForQR(completeVaultData)) : '');
+    if (!payloadToCopy) return;
+    try {
+      await navigator.clipboard.writeText(payloadToCopy);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = payloadToCopy;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedPayload(true);
+    setTimeout(() => setCopiedPayload(false), 2500);
+  };
+
+  const handleDownloadJSON = () => {
+    if (!completeVaultData) return;
+    const rawJson = JSON.stringify(completeVaultData, null, 2);
+    const blob = new Blob([rawJson], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `MaternaVault-${patient.id.replace('#', '')}-${patient.name.replace(/\s+/g, '_')}-Vault.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   };
 
   const handleDownloadQR = () => {
@@ -666,28 +721,36 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
               </div>
 
               {/* Action Buttons Toolbar */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full mt-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-3">
                 <button
                   onClick={handleDownloadQR}
-                  className="px-3 py-2 rounded-lg bg-[#006194] hover:bg-[#004f7b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  className="px-2.5 py-2 rounded-lg bg-[#006194] hover:bg-[#004f7b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                   title="Download PNG QR Image"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Save QR Image</span>
+                  <span>Save QR</span>
                 </button>
 
                 <button
-                  onClick={handlePrint}
-                  className="px-3 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                  title="Print QR Health Pass Card"
+                  onClick={handleCopyRawJSON}
+                  className={`px-2.5 py-2 rounded-lg border text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 ${
+                    copiedJSON
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                      : 'bg-[#f8fafc] hover:bg-white text-[#0f172a] border-[#cbd5e1]'
+                  }`}
+                  title="Copy the complete raw JSON string generated"
                 >
-                  <Printer className="w-3.5 h-3.5 text-[#006194]" />
-                  <span>Print Pass</span>
+                  {copiedJSON ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <FileJson className="w-3.5 h-3.5 text-[#006194]" />
+                  )}
+                  <span>{copiedJSON ? 'JSON Copied!' : 'Copy Raw JSON'}</span>
                 </button>
 
                 <button
                   onClick={handleCopyLink}
-                  className="px-3 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  className="px-2.5 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                   title="Copy Mobile Pass URL Link"
                 >
                   {copiedLink ? (
@@ -697,6 +760,77 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                   )}
                   <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
                 </button>
+
+                <button
+                  onClick={handlePrint}
+                  className="px-2.5 py-2 rounded-lg bg-[#f8fafc] hover:bg-white text-[#334155] border border-[#cbd5e1] text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  title="Print QR Health Pass Card"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#006194]" />
+                  <span>Print Pass</span>
+                </button>
+              </div>
+
+              {/* Expandable Raw JSON Viewer & Tools */}
+              <div className="w-full mt-3 border border-[#cbd5e1] rounded-xl overflow-hidden bg-white shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setShowJsonPreview(!showJsonPreview)}
+                  className="w-full px-3 py-2 flex items-center justify-between text-xs font-semibold text-[#334155] hover:bg-[#f8fafc] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <FileJson className="w-3.5 h-3.5 text-[#006194]" />
+                    <span className="font-bold text-[#0f172a]">Raw JSON Record Payload</span>
+                    <span className="text-[10px] text-[#64748b] font-mono bg-slate-100 px-1.5 py-0.5 rounded">
+                      {((new Blob([JSON.stringify(completeVaultData, null, 2)]).size) / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#006194] font-bold">
+                    {showJsonPreview ? 'Hide Payload ▲' : 'Inspect JSON ▼'}
+                  </span>
+                </button>
+
+                {showJsonPreview && (
+                  <div className="p-3 border-t border-[#e2e8f0] space-y-2 bg-[#0f172a] text-slate-100">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-[10px] text-slate-300 font-mono">
+                        Valid Schema v1.2.0 • Ready for Import & Cloud Sync
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleCopyRawJSON}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Copy formatted raw JSON string"
+                        >
+                          {copiedJSON ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedJSON ? 'Copied!' : 'Copy Raw JSON'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCopyPayload}
+                          className="px-2 py-1 text-[11px] font-medium bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Copy compressed QR token string"
+                        >
+                          {copiedPayload ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedPayload ? 'Token Copied!' : 'Copy QR Token'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadJSON}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-[#006194] hover:bg-[#004f7b] text-white rounded cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Download .json file"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>.json</span>
+                        </button>
+                      </div>
+                    </div>
+                    <pre className="text-[10.5px] font-mono text-emerald-400 bg-black/50 p-2.5 rounded-lg max-h-48 overflow-y-auto overflow-x-auto leading-relaxed border border-white/10 select-all">
+                      {JSON.stringify(completeVaultData, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1242,6 +1376,22 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyRawJSON}
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 shadow-2xs transition-colors border ${
+                copiedJSON
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'text-[#006194] bg-[#f0f9ff] hover:bg-[#e0f2fe] border-[#bae6fd]'
+              }`}
+              title="Copy the complete raw JSON string generated"
+            >
+              {copiedJSON ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <FileJson className="w-3.5 h-3.5 text-[#006194]" />
+              )}
+              <span>{copiedJSON ? 'JSON Copied!' : 'Copy Raw JSON'}</span>
+            </button>
             <button
               onClick={handlePrint}
               className="px-3.5 py-1.5 text-xs font-semibold text-[#334155] bg-white border border-[#cbd5e1] rounded-lg hover:bg-[#f1f5f9] cursor-pointer flex items-center gap-1.5 shadow-2xs"

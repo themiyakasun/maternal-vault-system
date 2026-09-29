@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Patient, MeshNode } from '../../types/triage';
-import { X, Download, FileSpreadsheet, Lock, CheckCircle2, Share2 } from 'lucide-react';
+import { X, Download, FileSpreadsheet, Lock, CheckCircle2, Share2, Check, FileJson } from 'lucide-react';
 
 interface ExportSummaryModalProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
   patients,
 }) => {
   const [downloaded, setDownloaded] = useState(false);
+  const [copiedJSON, setCopiedJSON] = useState(false);
 
   if (!isOpen) return null;
 
@@ -60,6 +61,30 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
 
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 3000);
+  };
+
+  const handleCopyRawJSON = async () => {
+    const exportData = {
+      clinic: 'Clinic Station',
+      exportedAt: new Date().toISOString(),
+      encryption: 'AES-256-GCM / PBKDF2',
+      totalPatients: patients.length,
+      criticalCount: patients.filter((p) => p.riskTier === 'high').length,
+      patients,
+    };
+    const content = JSON.stringify(exportData, null, 2);
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = content;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedJSON(true);
+    setTimeout(() => setCopiedJSON(false), 2500);
   };
 
   return (
@@ -116,18 +141,33 @@ export const ExportSummaryModal: React.FC<ExportSummaryModalProps> = ({
           </p>
 
           <div className="grid grid-cols-2 gap-3 pt-2">
-            <button
-              onClick={() => handleDownload('json')}
-              className="flex flex-col items-center justify-center p-3 border border-[#cbd5e1] rounded-lg hover:border-[#006194] hover:bg-[#f0f9ff] transition-all cursor-pointer text-center"
-            >
-              <Download className="w-5 h-5 text-[#006194] mb-1.5" />
-              <span className="text-xs font-bold text-[#0f172a]">Encrypted JSON</span>
-              <span className="text-[10px] text-[#64748b]">Encrypted clinic backup</span>
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={() => handleDownload('json')}
+                className="flex flex-col items-center justify-center p-3 border border-[#cbd5e1] rounded-lg hover:border-[#006194] hover:bg-[#f0f9ff] transition-all cursor-pointer text-center w-full"
+              >
+                <Download className="w-5 h-5 text-[#006194] mb-1.5" />
+                <span className="text-xs font-bold text-[#0f172a]">Encrypted JSON</span>
+                <span className="text-[10px] text-[#64748b]">Download .json file</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyRawJSON}
+                className={`py-1 px-2 rounded text-[11px] font-bold border transition-colors flex items-center justify-center gap-1 cursor-pointer ${
+                  copiedJSON
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    : 'bg-[#f8fafc] hover:bg-[#f1f5f9] border-[#cbd5e1] text-[#006194]'
+                }`}
+                title="Copy raw JSON string generated directly"
+              >
+                {copiedJSON ? <Check className="w-3 h-3 text-emerald-600" /> : <FileJson className="w-3 h-3 text-[#006194]" />}
+                <span>{copiedJSON ? 'JSON Copied!' : 'Copy Raw JSON'}</span>
+              </button>
+            </div>
 
             <button
               onClick={() => handleDownload('csv')}
-              className="flex flex-col items-center justify-center p-3 border border-[#cbd5e1] rounded-lg hover:border-[#006194] hover:bg-[#f0f9ff] transition-all cursor-pointer text-center"
+              className="flex flex-col items-center justify-center p-3 border border-[#cbd5e1] rounded-lg hover:border-[#006194] hover:bg-[#f0f9ff] transition-all cursor-pointer text-center h-[96px]"
             >
               <FileSpreadsheet className="w-5 h-5 text-[#047857] mb-1.5" />
               <span className="text-xs font-bold text-[#0f172a]">Clinical CSV Sheet</span>

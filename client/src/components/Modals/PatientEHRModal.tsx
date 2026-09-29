@@ -18,8 +18,11 @@ import {
   Trash2,
   Brain,
   Droplets,
-  Sparkles
+  Sparkles,
+  FileJson,
+  Check
 } from 'lucide-react';
+import { buildCompletePatientVaultJSON } from './PatientQRModal';
 
 interface PatientEHRModalProps {
   isOpen: boolean;
@@ -45,6 +48,24 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
   onDeletePatient,
 }) => {
   const [activeTab, setActiveTab] = useState<'h512b' | 'timeline' | 'vitals' | 'labs' | 'ai'>('h512b');
+  const [copiedJSON, setCopiedJSON] = useState(false);
+
+  const handleCopyJSON = async () => {
+    if (!patient) return;
+    const jsonStr = JSON.stringify(buildCompletePatientVaultJSON(patient), null, 2);
+    try {
+      await navigator.clipboard.writeText(jsonStr);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = jsonStr;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedJSON(true);
+    setTimeout(() => setCopiedJSON(false), 2500);
+  };
 
   if (!isOpen || !patient) return null;
 
@@ -199,6 +220,27 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                 <span className="hidden sm:inline">QR Pass</span>
               </button>
             )}
+            <button
+              onClick={handleCopyJSON}
+              className={`px-2 sm:px-2.5 py-1.5 rounded-lg active:scale-98 font-bold text-xs transition-all cursor-pointer flex items-center gap-1 shadow-2xs border ${
+                copiedJSON
+                  ? 'bg-emerald-500 border-emerald-400 text-white'
+                  : 'bg-white/10 hover:bg-white/20 border-white/20 text-white'
+              }`}
+              title="Copy complete raw JSON string"
+            >
+              {copiedJSON ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span className="hidden sm:inline">JSON Copied!</span>
+                </>
+              ) : (
+                <>
+                  <FileJson className="w-3.5 h-3.5 text-[#38bdf8]" />
+                  <span className="hidden sm:inline">Copy JSON</span>
+                </>
+              )}
+            </button>
             {onDeletePatient && (
               <button
                 onClick={() => onDeletePatient(patient)}
@@ -944,6 +986,23 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
               className="px-4 py-2 text-xs font-semibold text-[#475569] border border-[#cbd5e1] rounded-lg hover:bg-white cursor-pointer"
             >
               Close
+            </button>
+
+            <button
+              onClick={handleCopyJSON}
+              className={`px-3.5 py-2 text-xs font-bold rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors border ${
+                copiedJSON
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                  : 'text-[#006194] bg-[#f0f9ff] hover:bg-[#e0f2fe] border-[#bae6fd]'
+              }`}
+              title="Copy patient's complete raw JSON record"
+            >
+              {copiedJSON ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <FileJson className="w-3.5 h-3.5 text-[#006194]" />
+              )}
+              <span>{copiedJSON ? 'JSON Copied!' : 'Copy Raw JSON'}</span>
             </button>
 
             {onOpenQR && (

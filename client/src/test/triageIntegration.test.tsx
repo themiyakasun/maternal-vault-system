@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TriageQueueTable } from '../components/TriageQueueTable';
+import { PatientQRModal, buildCompletePatientVaultJSON } from '../components/Modals/PatientQRModal';
 import type { Patient } from '../types/triage';
 
 const mockPatients: Patient[] = [
@@ -159,5 +160,42 @@ describe('Frontend Integration - Clinical Triage Queue', () => {
     const highFilterButton = screen.getByRole('button', { name: /High \(/i });
     fireEvent.click(highFilterButton);
     expect(setActiveFilterMock).toHaveBeenCalledWith('high');
+  });
+
+  describe('Raw JSON String Generation & Copying', () => {
+    it('generates complete raw JSON data structure for patient vault', () => {
+      const json = buildCompletePatientVaultJSON(mockPatients[0]);
+      expect(json).toBeDefined();
+      expect(json.id).toBe('#1001');
+      expect(json.name).toBe('Anula Kumari');
+      expect(json.app).toBe('MaternaVault');
+      expect(json.gestationalWeeks).toBe(32);
+    });
+
+    it('renders Copy Raw JSON button and allows copying JSON in PatientQRModal', async () => {
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
+      render(
+        <PatientQRModal
+          isOpen={true}
+          onClose={vi.fn()}
+          patient={mockPatients[0]}
+        />
+      );
+
+      const copyButtons = screen.getAllByRole('button', { name: /Copy Raw JSON/i });
+      expect(copyButtons.length).toBeGreaterThan(0);
+
+      fireEvent.click(copyButtons[0]);
+      expect(writeTextMock).toHaveBeenCalled();
+      const copiedString = writeTextMock.mock.calls[0][0];
+      expect(copiedString).toContain('"name": "Anula Kumari"');
+      expect(copiedString).toContain('"app": "MaternaVault"');
+    });
   });
 });
