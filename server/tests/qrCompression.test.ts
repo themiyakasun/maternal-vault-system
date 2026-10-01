@@ -138,4 +138,21 @@ describe('3. QR Code Transfer & Gzip Compression Engine', () => {
       'Decompressed object must match original exactly',
     );
   });
+
+  it('conforms strictly to Section 4.8.1, Table 4.5 mandatory keys: pid, sbp, dbp, bs, temp, hr, epds, ro, chk', () => {
+    const fullPayload = buildMobilePayload(mockPatient);
+    const compactObj = compressVaultForQR(fullPayload);
+
+    // Verify all Table 4.5 mandatory keys exist and have valid values
+    assert.strictEqual(compactObj.pid, '#1001');
+    assert.strictEqual(compactObj.sbp, 142);
+    assert.strictEqual(compactObj.dbp, 92);
+    assert.strictEqual(typeof compactObj.bs, 'number');
+    assert.strictEqual(typeof compactObj.temp, 'number');
+    assert.strictEqual(typeof compactObj.hr, 'number');
+    assert.strictEqual(typeof compactObj.epds, 'number');
+    assert.strictEqual(compactObj.ro, 1);
+    assert.strictEqual(typeof compactObj.chk, 'string');
+    assert.strictEqual(compactObj.chk.length, 64); // SHA-256 hex string
+  });
 });
