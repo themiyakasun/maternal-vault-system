@@ -1,7 +1,5 @@
 import { localEncryptedDb } from '../db/localEncryptedDb.js';
-import { pool, isDatabaseConnected } from '../db/index.js';
 import type { Patient } from '../types/patient.js';
-import crypto from 'crypto';
 
 /**
  * Deterministic RFC 4122 v4 lowercase UUID generator for FHIR resources
@@ -256,6 +254,14 @@ export const fhirService = {
       }
     }
 
+    const isBpHigh = Boolean(sbp && sbp >= 140);
+    const gaWeeks = ga || 14;
+    const trimesterVal: 1 | 2 | 3 = gaWeeks < 13 ? 1 : gaWeeks < 27 ? 2 : 3;
+    const weightVal = weight || 62;
+    const heightVal = height || 158;
+    const heightM = heightVal / 100;
+    const bmiVal = Math.round((weightVal / (heightM * heightM)) * 10) / 10;
+
     const newPatientId = `#${Math.floor(1000 + Math.random() * 9000)}`;
     const newRecord: Patient = {
       id: newPatientId,
@@ -264,14 +270,23 @@ export const fhirService = {
       dob: pr.birthDate || '1998-01-01',
       nicNo: nicIdentifier,
       phone: pr.telecom?.[0]?.value || '+94 77 000 0000',
+      gravida: 1,
+      para: 0,
+      gestationalWeeks: gaWeeks,
+      gestationalDays: 0,
+      trimester: trimesterVal,
       bpSystolic: sbp || 120,
       bpDiastolic: dbp || 80,
-      gestationalWeeks: ga || 14,
-      weightKg: weight || 62,
-      heightCm: height || 158,
-      riskTier: (sbp && sbp >= 140) ? 'high' : 'low',
-      riskTitle: (sbp && sbp >= 140) ? 'HIGH RISK' : 'LOW RISK',
-      riskSubtitle: (sbp && sbp >= 140) ? 'Hypertension Alert' : 'Normal Pregnancy',
+      isBpAlert: isBpHigh,
+      bmi: bmiVal,
+      bmiCategory: bmiVal > 25 ? 'Overweight' : 'Normal',
+      weightKg: weightVal,
+      heightCm: heightVal,
+      riskTier: isBpHigh ? 'high' : 'low',
+      riskTitle: isBpHigh ? 'HIGH RISK' : 'LOW RISK',
+      riskSubtitle: isBpHigh ? 'Hypertension Alert' : 'Normal Pregnancy',
+      pretermProbability: isBpHigh ? 45 : 12,
+      featureWeights: [],
       syncStatus: 'synced-p2p',
     };
 

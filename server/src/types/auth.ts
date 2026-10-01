@@ -1,4 +1,5 @@
 export type UserRole = 'phm_lead' | 'phm' | 'doctor' | 'nurse' | 'admin';
+export type StaffRole = UserRole;
 
 export interface StaffUser {
   id: string; // e.g. 'PHM-PRIYA-71'
