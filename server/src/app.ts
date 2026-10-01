@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import patientRoutes from './routes/patientRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import fhirRoutes from './routes/fhirRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { isDatabaseConnected } from './db/index.js';
 import { localEncryptedDb } from './db/localEncryptedDb.js';
@@ -26,7 +27,7 @@ app.use(cors({
   exposedHeaders: ['Set-Cookie'],
 }));
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ type: ['application/json', 'application/fhir+json', 'application/*+json'] }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health Check Endpoint with Local Encrypted DB & Sync Telemetry
@@ -63,6 +64,10 @@ app.use('/api/patients', patientRoutes);
 
 // Sync Telemetry & Manual Sync Routes
 app.use('/api/sync', syncRoutes);
+
+// HL7 FHIR R4 Ingestion & Interoperability Routes (Section 4.4.3 NFR-03 & Section 4.8.1)
+app.use('/fhir/R4', fhirRoutes);
+app.use('/api/fhir', fhirRoutes);
 
 // Mobile Browser Emergency Health Pass Viewer (for smartphone cameras)
 app.get('/mobile/patient/:id', getPatientMobileView);

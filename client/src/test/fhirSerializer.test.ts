@@ -51,7 +51,9 @@ const samplePatient = {
   ],
 };
 
-describe('HL7 FHIR R4 Serializer', () => {
+const RFC_4122_UUID_REGEX = /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+describe('HL7 FHIR Serializer & Validator Conformance', () => {
   it('generates a valid FHIR R4 collection bundle', () => {
     const bundle = serializePatientToFHIR(samplePatient as unknown as Patient);
 
@@ -60,6 +62,38 @@ describe('HL7 FHIR R4 Serializer', () => {
     expect(bundle.id).toContain('bundle-maternavault-1001');
     expect(Array.isArray(bundle.entry)).toBe(true);
     expect(bundle.entry.length).toBeGreaterThan(0);
+  });
+
+  it('guarantees all fullUrl values strictly adhere to RFC 4122 lowercase UUIDs', () => {
+    const bundle = serializePatientToFHIR(samplePatient as unknown as Patient);
+
+    bundle.entry.forEach((entry) => {
+      expect(entry.fullUrl).toMatch(RFC_4122_UUID_REGEX);
+    });
+  });
+
+  it('provides dom-6 XHTML narratives for all resources', () => {
+    const bundle = serializePatientToFHIR(samplePatient as unknown as Patient);
+
+    bundle.entry.forEach((entry) => {
+      const res = entry.resource as any;
+      expect(res.text).toBeDefined();
+      expect(res.text.status).toBe('generated');
+      expect(res.text.div).toContain('<div xmlns="http://www.w3.org/1999/xhtml">');
+    });
+  });
+
+  it('includes performer on all Observation resources', () => {
+    const bundle = serializePatientToFHIR(samplePatient as unknown as Patient);
+
+    const observations = bundle.entry.filter((e) => e.resource.resourceType === 'Observation');
+    expect(observations.length).toBeGreaterThan(0);
+    observations.forEach((entry) => {
+      const obs = entry.resource as any;
+      expect(Array.isArray(obs.performer)).toBe(true);
+      expect(obs.performer.length).toBeGreaterThan(0);
+      expect(obs.performer[0].display).toBeDefined();
+    });
   });
 
   it('contains compliant Patient resource with correct official identifier', () => {
@@ -115,7 +149,7 @@ describe('HL7 FHIR R4 Serializer', () => {
     expect((fhrEntry!.resource as any).valueQuantity.code).toBe('/min');
   });
 
-  it('contains Encounter entries for documented Antenatal Clinic visits', () => {
+  it('contains Encounter entries with R4 schema by default', () => {
     const bundle = serializePatientToFHIR(samplePatient as unknown as Patient);
     const encounters = bundle.entry.filter(e => e.resource.resourceType === 'Encounter');
 
@@ -124,5 +158,20 @@ describe('HL7 FHIR R4 Serializer', () => {
     expect(enc1.status).toBe('finished');
     expect(enc1.class.code).toBe('AMB');
     expect(enc1.serviceType.coding[0].code).toBe('18114009');
+    expect(enc1.period).toBeDefined();
+  });
+
+  it('adapts Encounter entries to R5 schema when fhirVersion is R5', () => {
+    const bundle = serializePatientToFHIR(samplePatient as unknown as Patient, { fhirVersion: 'R5' });
+    const encounters = bundle.entry.filter(e => e.resource.resourceType === 'Encounter');
+
+    expect(encounters.length).toBe(2);
+    const enc1 = encounters[0].resource as any;
+    expect(enc1.status).toBe('finished');
+    expect(Array.isArray(enc1.class)).toBe(true);
+    expect(enc1.class[0].coding[0].code).toBe('AMB');
+    expect(Array.isArray(enc1.serviceType)).toBe(true);
+    expect(enc1.serviceType[0].concept.coding[0].code).toBe('18114009');
+    expect(enc1.actualPeriod).toBeDefined();
   });
 });

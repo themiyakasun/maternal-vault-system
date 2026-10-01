@@ -12,6 +12,8 @@ import {
   checkPatientNic,
 } from '../controllers/patientController.js';
 
+import { requireRole } from '../middleware/rbacMiddleware.js';
+
 const router = Router();
 
 // GET summary stats (must come before /:id)
@@ -26,8 +28,8 @@ router.get('/', getAllPatients);
 // Get unique QR code for mobile data transfer
 router.get('/:id/qr', getPatientQRCode);
 
-// Recalculate 3-model risk on demand for single patient
-router.post('/:id/evaluate-risk', recalculatePatientRisk);
+// Recalculate 3-model risk on demand (MOH Doctor / Admin Supervisory Authority - UC-06)
+router.post('/:id/evaluate-risk', requireRole(['doctor', 'admin']), recalculatePatientRisk);
 
 // Get single patient by ID
 router.get('/:id', getPatientById);

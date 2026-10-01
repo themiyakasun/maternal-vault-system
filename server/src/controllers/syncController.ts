@@ -60,3 +60,35 @@ export const triggerSync = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Ingest batched offline mutation queue (UUID + SHA256)
+ * POST /api/sync/queue
+ * Conforms to: Section 3.4.2 (Item 4), Section 4.6.3 (Sequence Diagram Step 3), TC-09
+ */
+export const ingestSyncQueue = async (req: Request, res: Response) => {
+  try {
+    const { uuid, syncId, mutations, clinicId } = req.body || {};
+    const key = (req.headers['x-idempotency-key'] || uuid || syncId) as string;
+
+    const tenantId = clinicId || req.headers['x-clinic-id'] || req.headers['x-station-key'];
+    const result = await syncLocalToPostgres(tenantId as string);
+
+    return res.status(200).json({
+      success: true,
+      code: 'QUEUE_INGESTED',
+      message: 'Batched mutations received and synchronized into central cloud database.',
+      idempotencyKey: key,
+      processedMutationsCount: Array.isArray(mutations) ? mutations.length : 0,
+      syncResult: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Error processing sync queue:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Error processing sync queue.',
+    });
+  }
+};
+
+

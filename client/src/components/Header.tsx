@@ -165,10 +165,25 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="text-xs font-bold text-[#0f172a] leading-tight truncate max-w-[130px]">
               {displayName}
             </div>
-            <div className="inline-flex items-center gap-1 mt-0.5">
+            <div className="inline-flex items-center gap-1 mt-0.5 flex-wrap">
               <span className="bg-[#e0f2fe] text-[#004b73] text-[10px] font-bold px-1.5 py-0.2 rounded border border-[#bae6fd]">
                 {displayTitle}
               </span>
+              {currentUser?.role === 'doctor' && (
+                <span className="bg-purple-100 text-purple-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded border border-purple-300">
+                  MOH Doctor (UC-06)
+                </span>
+              )}
+              {currentUser?.role === 'phm' && (
+                <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded border border-emerald-300">
+                  Field PHM
+                </span>
+              )}
+              {currentUser?.role === 'admin' && (
+                <span className="bg-amber-100 text-amber-800 text-[9px] font-extrabold px-1.5 py-0.2 rounded border border-amber-300">
+                  District Admin
+                </span>
+              )}
             </div>
           </div>
 

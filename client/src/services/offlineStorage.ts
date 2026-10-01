@@ -8,6 +8,7 @@ import {
   type QueuedOfflineMutation,
   type OfflineMutationType,
 } from './db/indexedDb';
+import { requestBackgroundSync } from '../serviceWorkerRegistration';
 
 export type { QueuedOfflineMutation, OfflineMutationType };
 
@@ -193,6 +194,9 @@ export const offlineStorage = {
         console.warn('Failed to enqueue mutation into IndexedDB:', err);
       });
     }
+
+    // 3. Request Autonomous Background Sync Worker (Section 4.2.3 & TC-08)
+    requestBackgroundSync('sync-maternal-records').catch(() => {});
 
     console.log(`📥 [IndexedDB] Queued offline mutation [${mutation.type}] for patient ${mutation.patientId}`);
   },

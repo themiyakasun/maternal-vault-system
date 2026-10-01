@@ -751,16 +751,30 @@ function DashboardContent() {
                     <Zap className="w-3 h-3 fill-[#16a34a] text-[#16a34a]" />
                     Automatic Care Guidance Active
                   </span>
+                  {currentUser?.role === 'doctor' || currentUser?.role === 'admin' ? (
+                    <span className="bg-purple-100 text-purple-800 text-[11px] font-bold px-2.5 py-0.5 rounded border border-purple-300 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-purple-700" />
+                      MOH Doctor Supervisory Authority (UC-06)
+                    </span>
+                  ) : (
+                    <span className="bg-emerald-50 text-emerald-800 text-[11px] font-medium px-2.5 py-0.5 rounded border border-emerald-200">
+                      PHM Field Queue • Escalates to MOH Doctor
+                    </span>
+                  )}
                 </div>
 
                 {/* Main Heading */}
                 <h1 className="text-2xl lg:text-[28px] font-extrabold text-[#0f172a] tracking-tight leading-tight">
-                  Priority Maternal Care Queue
+                  {currentUser?.role === 'doctor' || currentUser?.role === 'admin'
+                    ? 'Divisional High-Risk Triage Queue'
+                    : 'Priority Maternal Care Queue'}
                 </h1>
 
                 {/* Subtitle */}
                 <p className="text-xs text-[#64748b] mt-1 max-w-3xl leading-relaxed">
-                  <span className="font-semibold text-[#334155]">Village Zone: Rampur Sector 3</span> • Mothers ordered by clinical priority and upcoming due dates. Operates completely offline on tablet.
+                  {currentUser?.role === 'doctor' || currentUser?.role === 'admin'
+                    ? 'Supervisory medical oversight and high-risk case evaluation across Rampur Division clinics. Authoritative review tier.'
+                    : 'Village Zone: Rampur Sector 3 • Mothers ordered by clinical priority and upcoming due dates. Operates completely offline on tablet.'}
                 </p>
               </div>
 

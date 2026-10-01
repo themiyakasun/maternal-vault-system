@@ -526,6 +526,24 @@ class TenantStore {
       return { valid: false, error: 'Could not decode session token.' };
     }
   }
+
+  /**
+   * Generates a signed session token for a given user and clinic.
+   */
+  public generateSessionToken(clinicId: string, userId: string, ttlHours: number = 12): string {
+    const issuedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+    const sessionPayload: OfflineSession = {
+      token: '',
+      userId,
+      clinicId,
+      issuedAt,
+      expiresAt,
+    };
+    const payloadString = `${sessionPayload.userId}:${sessionPayload.clinicId}:${sessionPayload.issuedAt}:${sessionPayload.expiresAt}`;
+    const signature = crypto.createHmac('sha256', TOKEN_SECRET).update(payloadString).digest('hex');
+    return Buffer.from(JSON.stringify({ ...sessionPayload, sig: signature })).toString('base64url');
+  }
 }
 
 export const tenantStore = new TenantStore();

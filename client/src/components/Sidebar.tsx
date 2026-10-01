@@ -25,13 +25,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { currentClinic } = useAuth();
+  const { currentClinic, currentUser } = useAuth();
+  const isDoctor = currentUser?.role === 'doctor' || currentUser?.role === 'admin';
+
   const navItems = [
-    { id: 'records', label: 'Maternal Records', icon: Users },
-    { id: 'triage', label: 'Priority Care Queue', icon: HeartPulse },
-    { id: 'mesh-logs', label: 'System & Cloud Sync', icon: Database },
-    { id: 'diagnostics', label: 'Clinical Health Guides', icon: BookOpen },
-    { id: 'settings', label: 'Clinic Settings', icon: Sliders },
+    { id: 'records', label: 'Maternal Records', icon: Users, badge: null },
+    { 
+      id: 'triage', 
+      label: isDoctor ? 'Divisional High-Risk Queue' : 'Priority Care Queue', 
+      icon: HeartPulse,
+      badge: isDoctor ? 'UC-06 Doctor' : 'PHM Field'
+    },
+    { id: 'mesh-logs', label: 'System & Cloud Sync', icon: Database, badge: null },
+    { id: 'diagnostics', label: 'Clinical Health Guides', icon: BookOpen, badge: null },
+    { id: 'settings', label: 'Clinic Settings', icon: Sliders, badge: null },
   ];
 
   const handleSelectNav = (id: string) => {
@@ -40,6 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       onCloseMobile();
     }
   };
+
+  const stationSubtitle = currentUser?.role === 'doctor'
+    ? 'MOH Supervisory Station'
+    : currentUser?.role === 'admin'
+    ? 'District Admin Console'
+    : 'Midwife Clinic Station';
 
   const sidebarContent = (
     <div className="flex flex-col justify-between h-full select-none bg-[#f8fafc]">
@@ -51,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               size={38} 
               variant="badge" 
               showText 
-              subtitle="Midwife Clinic Station" 
+              subtitle={stationSubtitle} 
             />
           </div>
 
@@ -69,8 +82,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation Menu */}
         <div className="p-3">
-          <div className="px-3 pt-3 pb-2 text-[10px] font-bold text-[#707881] uppercase tracking-wider">
-            Midwife Workstation
+          <div className="px-3 pt-3 pb-2 text-[10px] font-bold text-[#707881] uppercase tracking-wider flex items-center justify-between">
+            <span>{isDoctor ? 'MOH Doctor Console' : 'Midwife Workstation'}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+              isDoctor ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'
+            }`}>
+              {currentUser?.role || 'phm'}
+            </span>
           </div>
           <nav className="space-y-1">
             {navItems.map((item) => {
@@ -90,6 +108,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-[#707881]'}`} />
                     <span>{item.label}</span>
                   </div>
+                  {item.badge && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                      isActive 
+                        ? 'bg-white/20 text-white' 
+                        : isDoctor ? 'bg-purple-50 text-purple-700' : 'bg-emerald-50 text-emerald-700'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}

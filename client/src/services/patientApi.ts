@@ -144,13 +144,43 @@ export const patientApi = {
     return res.json();
   },
 
-  // Trigger manual push to central PostgreSQL database
+  // Trigger manual push to central PostgreSQL database (Section 4.6.3 Step 3)
   async triggerCentralDbSync(tenantId?: string) {
+    const syncKey = `sync-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': syncKey,
+    };
+    if (tenantId) {
+      headers['X-Station-Key'] = tenantId;
+      headers['x-tenant-id'] = tenantId;
+    }
+
     const res = await fetch(`${API_BASE}/sync/trigger`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
-      body: JSON.stringify({ tenantId }),
+      body: JSON.stringify({ tenantId, uuid: syncKey, timestamp: new Date().toISOString() }),
+    });
+    return res.json();
+  },
+
+  // Dispatch batched offline mutations to server queue (Section 4.6.3 Step 3: HTTPS POST /sync/queue)
+  async dispatchSyncQueue(payload: { uuid: string; mutations: any[]; clinicId?: string }) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': payload.uuid,
+    };
+    if (payload.clinicId) {
+      headers['X-Station-Key'] = payload.clinicId;
+      headers['x-tenant-id'] = payload.clinicId;
+    }
+
+    const res = await fetch(`${API_BASE}/sync/queue`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify(payload),
     });
     return res.json();
   },

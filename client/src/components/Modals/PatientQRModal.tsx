@@ -811,7 +811,7 @@ export const PatientQRModal: React.FC<PatientQRModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-[#64748b]">
-                      Strictly conforms to international HL7 FHIR Release 4 standard (0 Errors, 0 Fatal).
+                      Strictly conforms to HL7 FHIR R4 standard. <i>(On validator.fhir.org, select <b>R4 (4.0.1)</b> in the version dropdown)</i>.
                     </p>
                   </div>
                 </div>
