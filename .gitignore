@@ -27,3 +27,12 @@ yarn-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local Encrypted Databases & Vaults
+data/*.db
+data/*.vault
+server/data/*.db
+server/data/*.vault
+*.db
+*.vault
+

@@ -156,6 +156,9 @@ jobs:
             set -e
             echo '🚀 Starting automated deployment on AWS EC2...'
             cd \$HOME/maternal-vault-system
+            echo '🧹 Clearing any uncommitted runtime database files...'
+            git checkout -- data/ 2>/dev/null || true
+            git checkout -- server/data/ 2>/dev/null || true
             echo '📥 Pulling latest code from GitHub...'
             git pull origin main
             echo '🔨 Building and launching production containers...'
