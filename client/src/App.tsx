@@ -69,6 +69,14 @@ function DashboardContent() {
     if (cachedPatients.length > 0) {
       setPatients(cachedPatients);
       setSelectedPatientId(cachedPatients[0].id);
+    } else {
+      // Async load from IndexedDB object store
+      offlineStorage.loadCachedPatientsAsync(cid).then((idbPatients) => {
+        if (isMounted && idbPatients.length > 0) {
+          setPatients(idbPatients);
+          setSelectedPatientId(idbPatients[0].id);
+        }
+      });
     }
 
     // 2. Fetch scoped patients with reliable offline replay & multi-device synchronization

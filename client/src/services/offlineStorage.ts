@@ -1,120 +1,234 @@
 import type { Patient } from '../types/triage';
 import { patientApi } from './patientApi';
+import {
+  idbPatientStore,
+  idbMutationStore,
+  migrateFromLocalStorageToIndexedDB,
+  isIndexedDBAvailable,
+  type QueuedOfflineMutation,
+  type OfflineMutationType,
+} from './db/indexedDb';
 
-export type OfflineMutationType = 'CREATE_PATIENT' | 'UPDATE_PATIENT' | 'DELETE_PATIENT' | 'ADD_VISIT';
+export type { QueuedOfflineMutation, OfflineMutationType };
 
-export interface QueuedOfflineMutation {
-  id: string;
-  type: OfflineMutationType;
-  clinicId: string;
-  patientId: string;
-  payload: any;
-  createdAt: number;
-  retryCount: number;
-}
+// In-memory hot cache for instant, synchronous UI queries
+const memoryPatientCache = new Map<string, Patient[]>();
+const memoryMutationQueue = new Map<string, QueuedOfflineMutation[]>();
 
-const CACHE_KEY_PREFIX = 'mv_cached_patients_';
-const QUEUE_KEY_PREFIX = 'mv_offline_mutations_';
+let isInitialized = false;
+let initPromise: Promise<void> | null = null;
 
 export const offlineStorage = {
-  // 1. Local Browser Patients Cache
-  loadCachedPatients(clinicId: string): Patient[] {
-    try {
-      const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${clinicId}`);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.warn('Failed to load cached patients from localStorage:', e);
-      return [];
-    }
-  },
+  /**
+   * Initializes IndexedDB and executes one-time migration from legacy localStorage.
+   */
+  async init(): Promise<void> {
+    if (isInitialized) return;
+    if (initPromise) return initPromise;
 
-  saveCachedPatients(clinicId: string, patients: Patient[]): void {
-    try {
-      localStorage.setItem(`${CACHE_KEY_PREFIX}${clinicId}`, JSON.stringify(patients));
-    } catch (e) {
-      console.warn('Failed to save patients to localStorage cache:', e);
-    }
-  },
-
-  // 2. Offline Mutation Queue
-  getOfflineQueue(clinicId?: string): QueuedOfflineMutation[] {
-    try {
-      const key = clinicId ? `${QUEUE_KEY_PREFIX}${clinicId}` : null;
-      if (key) {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : [];
+    initPromise = (async () => {
+      try {
+        if (isIndexedDBAvailable()) {
+          await migrateFromLocalStorageToIndexedDB();
+        }
+      } catch (err) {
+        console.warn('offlineStorage initialization notice:', err);
+      } finally {
+        isInitialized = true;
       }
+    })();
 
-      // Collect across all clinics if no clinicId provided
-      const all: QueuedOfflineMutation[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(QUEUE_KEY_PREFIX)) {
-          const raw = localStorage.getItem(k);
-          if (raw) {
-            all.push(...JSON.parse(raw));
+    return initPromise;
+  },
+
+  // =========================================================================
+  // 1. Local Browser Patients Store (IndexedDB + Synchronous Hot Cache)
+  // =========================================================================
+
+  /**
+   * Synchronous load from memory cache (populated on boot / previous writes).
+   * Ensures zero-latency rendering in React components while IndexedDB runs in the background.
+   */
+  loadCachedPatients(clinicId: string): Patient[] {
+    // 1. Try memory cache first
+    const inMem = memoryPatientCache.get(clinicId);
+    if (inMem && inMem.length > 0) {
+      return inMem;
+    }
+
+    // 2. Trigger async background load from IndexedDB
+    this.loadCachedPatientsAsync(clinicId).catch(() => {});
+
+    // 3. Fallback to localStorage if migration hasn't run yet
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(`mv_cached_patients_${clinicId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            memoryPatientCache.set(clinicId, parsed);
+            return parsed;
           }
         }
       }
-      return all;
-    } catch (e) {
-      console.warn('Failed to read offline mutation queue:', e);
-      return [];
+    } catch {
+      // Ignored
     }
+
+    return [];
+  },
+
+  /**
+   * Asynchronous load directly from IndexedDB object store with B-Tree indexes.
+   */
+  async loadCachedPatientsAsync(clinicId: string): Promise<Patient[]> {
+    try {
+      await this.init();
+      if (isIndexedDBAvailable()) {
+        const patients = await idbPatientStore.getAllByClinic(clinicId);
+        if (patients.length > 0) {
+          memoryPatientCache.set(clinicId, patients);
+          return patients;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load cached patients from IndexedDB:', e);
+    }
+    return memoryPatientCache.get(clinicId) || [];
+  },
+
+  /**
+   * Persists patients to IndexedDB using atomic ACID transaction (readwrite).
+   */
+  saveCachedPatients(clinicId: string, patients: Patient[]): void {
+    // 1. Instant update to memory cache
+    memoryPatientCache.set(clinicId, patients);
+
+    // 2. Transactional async commit to IndexedDB
+    if (isIndexedDBAvailable()) {
+      idbPatientStore.savePatients(clinicId, patients).catch((err) => {
+        console.warn('IndexedDB savePatients transaction error:', err);
+      });
+    } else {
+      // Graceful fallback for non-IndexedDB environments
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`mv_cached_patients_${clinicId}`, JSON.stringify(patients));
+        }
+      } catch (e) {
+        console.warn('Failed to save patients to fallback storage:', e);
+      }
+    }
+  },
+
+  // =========================================================================
+  // 2. Transaction-Safe Offline Mutation Queue
+  // =========================================================================
+
+  getOfflineQueue(clinicId?: string): QueuedOfflineMutation[] {
+    if (clinicId) {
+      const q = memoryMutationQueue.get(clinicId);
+      if (q) return q;
+    } else {
+      const all: QueuedOfflineMutation[] = [];
+      for (const list of memoryMutationQueue.values()) {
+        all.push(...list);
+      }
+      if (all.length > 0) return all;
+    }
+
+    // Trigger async refresh in background
+    this.getOfflineQueueAsync(clinicId).catch(() => {});
+
+    // Fallback to localStorage if migration pending
+    try {
+      if (typeof localStorage !== 'undefined') {
+        if (clinicId) {
+          const raw = localStorage.getItem(`mv_offline_mutations_${clinicId}`);
+          return raw ? JSON.parse(raw) : [];
+        }
+      }
+    } catch {
+      // Ignored
+    }
+
+    return clinicId ? memoryMutationQueue.get(clinicId) || [] : [];
+  },
+
+  async getOfflineQueueAsync(clinicId?: string): Promise<QueuedOfflineMutation[]> {
+    try {
+      await this.init();
+      if (isIndexedDBAvailable()) {
+        const queue = await idbMutationStore.getQueue(clinicId);
+        if (clinicId) {
+          memoryMutationQueue.set(clinicId, queue);
+        }
+        return queue;
+      }
+    } catch (e) {
+      console.warn('Failed to read offline queue from IndexedDB:', e);
+    }
+    return this.getOfflineQueue(clinicId);
   },
 
   enqueueMutation(mutation: Omit<QueuedOfflineMutation, 'id' | 'createdAt' | 'retryCount'>): void {
-    try {
-      const queueKey = `${QUEUE_KEY_PREFIX}${mutation.clinicId}`;
-      const queue = this.getOfflineQueue(mutation.clinicId);
-      
-      const newAction: QueuedOfflineMutation = {
-        ...mutation,
-        id: `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        createdAt: Date.now(),
-        retryCount: 0,
-      };
+    const newAction: QueuedOfflineMutation = {
+      ...mutation,
+      id: `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      createdAt: Date.now(),
+      retryCount: 0,
+    };
 
-      // If there's an existing pending mutation of the same type for the same patient, replace or append
-      const filtered = queue.filter(
-        item => !(item.patientId === mutation.patientId && item.type === mutation.type)
-      );
+    // 1. Update in-memory queue
+    const currentQueue = memoryMutationQueue.get(mutation.clinicId) || [];
+    const filtered = currentQueue.filter(
+      (item) => !(item.patientId === mutation.patientId && item.type === mutation.type)
+    );
+    filtered.push(newAction);
+    memoryMutationQueue.set(mutation.clinicId, filtered);
 
-      filtered.push(newAction);
-      localStorage.setItem(queueKey, JSON.stringify(filtered));
-      console.log(`📥 Queued offline mutation [${mutation.type}] for patient ${mutation.patientId}`);
-    } catch (e) {
-      console.warn('Failed to enqueue offline mutation:', e);
+    // 2. Commit transaction to IndexedDB
+    if (isIndexedDBAvailable()) {
+      idbMutationStore.enqueue(newAction).catch((err) => {
+        console.warn('Failed to enqueue mutation into IndexedDB:', err);
+      });
     }
+
+    console.log(`📥 [IndexedDB] Queued offline mutation [${mutation.type}] for patient ${mutation.patientId}`);
   },
 
   removeMutation(actionId: string, clinicId: string): void {
-    try {
-      const queueKey = `${QUEUE_KEY_PREFIX}${clinicId}`;
-      const queue = this.getOfflineQueue(clinicId);
-      const filtered = queue.filter(item => item.id !== actionId);
-      localStorage.setItem(queueKey, JSON.stringify(filtered));
-    } catch (e) {
-      console.warn('Failed to remove mutation from queue:', e);
+    // 1. Update memory
+    const currentQueue = memoryMutationQueue.get(clinicId) || [];
+    const filtered = currentQueue.filter((item) => item.id !== actionId);
+    memoryMutationQueue.set(clinicId, filtered);
+
+    // 2. Remove from IndexedDB
+    if (isIndexedDBAvailable()) {
+      idbMutationStore.remove(actionId).catch((err) => {
+        console.warn('Failed to remove mutation from IndexedDB:', err);
+      });
     }
   },
 
   clearQueue(clinicId: string): void {
-    try {
-      localStorage.removeItem(`${QUEUE_KEY_PREFIX}${clinicId}`);
-    } catch (e) {
-      console.warn('Failed to clear queue:', e);
+    memoryMutationQueue.delete(clinicId);
+    if (isIndexedDBAvailable()) {
+      idbMutationStore.clearClinic(clinicId).catch((err) => {
+        console.warn('Failed to clear IndexedDB queue:', err);
+      });
     }
   },
 
+  // =========================================================================
   // 3. Flush & Replay Offline Queue to Backend
+  // =========================================================================
+
   async flushOfflineQueue(
     clinicId: string,
     onSynced?: (updatedPatient?: Patient, mutationType?: OfflineMutationType) => void
   ): Promise<{ synced: number; remaining: number }> {
-    const queue = this.getOfflineQueue(clinicId);
+    const queue = await this.getOfflineQueueAsync(clinicId);
     if (queue.length === 0) {
       return { synced: 0, remaining: 0 };
     }
@@ -142,7 +256,7 @@ export const offlineStorage = {
         if (serverResult?.success !== false) {
           this.removeMutation(item.id, item.clinicId);
           synced++;
-          console.log(`✅ Successfully synced offline mutation [${item.type}] for ${item.patientId}`);
+          console.log(`✅ [IndexedDB Sync] Successfully synced offline mutation [${item.type}] for ${item.patientId}`);
           if (onSynced) {
             onSynced(serverResult?.data, item.type);
           }
@@ -158,11 +272,14 @@ export const offlineStorage = {
       }
     }
 
-    const remaining = this.getOfflineQueue(clinicId).length;
+    const remaining = (await this.getOfflineQueueAsync(clinicId)).length;
     return { synced, remaining };
   },
 
+  // =========================================================================
   // 4. Safe Reconciliation: Never wipe out local un-synced data when remote list arrives
+  // =========================================================================
+
   reconcilePatients(
     serverList: Patient[],
     currentLocalList: Patient[],
@@ -170,15 +287,15 @@ export const offlineStorage = {
   ): Patient[] {
     const queue = this.getOfflineQueue(clinicId);
     const deletedPatientIds = new Set(
-      queue.filter(q => q.type === 'DELETE_PATIENT').map(q => q.patientId)
+      queue.filter((q) => q.type === 'DELETE_PATIENT').map((q) => q.patientId)
     );
 
     // Filter out any patients that have a pending offline deletion
-    const filteredServer = serverList.filter(p => !deletedPatientIds.has(p.id));
-    const serverIdSet = new Set(filteredServer.map(p => p.id));
+    const filteredServer = serverList.filter((p) => !deletedPatientIds.has(p.id));
+    const serverIdSet = new Set(filteredServer.map((p) => p.id));
 
     // Retain any local patient that is not yet on the server, provided it was not explicitly deleted
-    const unpushedLocalPatients = currentLocalList.filter(p => {
+    const unpushedLocalPatients = currentLocalList.filter((p) => {
       if (deletedPatientIds.has(p.id)) return false;
       return !serverIdSet.has(p.id);
     });
@@ -186,9 +303,9 @@ export const offlineStorage = {
     // Merge: unpushed local patients stay at the top so they never disappear
     const mergedList = [...unpushedLocalPatients, ...filteredServer];
 
-    // Persist to local browser storage so page reloads also retain them
+    // Persist to IndexedDB
     this.saveCachedPatients(clinicId, mergedList);
 
     return mergedList;
-  }
+  },
 };
