@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Patient, ANCVisitInput } from '../../types/triage';
 import { useAuth } from '../../context/AuthContext';
 import { formatDbDate } from '../../utils/dateUtils';
+import { validateClinicalVitals } from '../../utils/clinicalValidation';
 import { 
   X, 
   Calendar, 
@@ -100,13 +101,17 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
     const systolic = parseInt(bpSystolic, 10);
     const diastolic = parseInt(bpDiastolic, 10);
 
-    if (isNaN(weight) || weight <= 30 || weight > 200) {
-      setErrorMsg('Please enter a valid maternal weight in kg (30 - 200 kg).');
-      return;
-    }
+    // Enforce Section 4.7.1, Table 4.4 Physiological Boundary Limits (TC-02)
+    const clinicalValidation = validateClinicalVitals({
+      bpSystolic: systolic,
+      bpDiastolic: diastolic,
+      weightKg: weight,
+      fhr,
+      fundalHeight: sfhCm,
+    });
 
-    if (isNaN(systolic) || isNaN(diastolic) || systolic <= 60 || diastolic <= 40) {
-      setErrorMsg('Please enter a valid blood pressure reading (e.g. 120 / 80).');
+    if (!clinicalValidation.isValid) {
+      setErrorMsg(`Clinical Boundary Violation (Table 4.4): ${clinicalValidation.firstError}`);
       return;
     }
 

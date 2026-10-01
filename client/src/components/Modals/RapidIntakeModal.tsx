@@ -22,6 +22,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { patientApi } from '../../services/patientApi';
+import { validateClinicalVitals } from '../../utils/clinicalValidation';
 
 interface RapidIntakeModalProps {
   isOpen: boolean;
@@ -454,6 +455,23 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
         alert(`Cannot register: Mother with NIC "${nicNo.trim().toUpperCase()}" is already registered.`);
         return;
       }
+    }
+
+    // Enforce Section 4.7.1, Table 4.4 Physiological Boundary Limits (TC-02)
+    const clinicalValidation = validateClinicalVitals({
+      bpSystolic: systolic,
+      bpDiastolic: diastolic,
+      weightKg,
+      heightCm,
+      hb,
+      age,
+      fhr,
+      fundalHeight,
+    });
+
+    if (!clinicalValidation.isValid) {
+      alert(`Clinical Range Violation (Table 4.4):\n${clinicalValidation.firstError}`);
+      return;
     }
 
     const newId = `#${Math.floor(1000 + Math.random() * 9000)}`;

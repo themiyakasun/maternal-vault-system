@@ -149,6 +149,28 @@ export const createPatient = async (req: Request, res: Response) => {
       } catch (err) {
         console.warn('PostgreSQL duplicate NIC check warning:', err);
       }
+      // Enforce Section 4.7.1, Table 4.4: Physiological Boundary & Plausibility Validation (TC-02)
+      if (input.bpSystolic != null && (input.bpSystolic < 70 || input.bpSystolic > 240)) {
+        return res.status(400).json({
+          success: false,
+          code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+          message: `Systolic BP (${input.bpSystolic} mmHg) violates Table 4.4 physiological boundary (70–240 mmHg).`,
+        });
+      }
+      if (input.bpDiastolic != null && (input.bpDiastolic < 40 || input.bpDiastolic > 140)) {
+        return res.status(400).json({
+          success: false,
+          code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+          message: `Diastolic BP (${input.bpDiastolic} mmHg) violates Table 4.4 physiological boundary (40–140 mmHg).`,
+        });
+      }
+      if (input.weightKg != null && (input.weightKg < 30 || input.weightKg > 220)) {
+        return res.status(400).json({
+          success: false,
+          code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+          message: `Maternal weight (${input.weightKg} kg) violates Table 4.4 physiological boundary (30–220 kg).`,
+        });
+      }
     }
 
     const weeks = input.gestationalWeeks || 12;
@@ -511,6 +533,29 @@ export const addPatientVisit = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         message: 'weightKg, bpSystolic, and bpDiastolic are required fields for an ANC visit.',
+      });
+    }
+
+    // Enforce Section 4.7.1, Table 4.4: Physiological Boundary Limits (TC-02)
+    if (visitInput.bpSystolic < 70 || visitInput.bpSystolic > 240) {
+      return res.status(400).json({
+        success: false,
+        code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+        message: `Systolic BP (${visitInput.bpSystolic} mmHg) violates Table 4.4 physiological boundary (70–240 mmHg).`,
+      });
+    }
+    if (visitInput.bpDiastolic < 40 || visitInput.bpDiastolic > 140) {
+      return res.status(400).json({
+        success: false,
+        code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+        message: `Diastolic BP (${visitInput.bpDiastolic} mmHg) violates Table 4.4 physiological boundary (40–140 mmHg).`,
+      });
+    }
+    if (visitInput.weightKg < 30 || visitInput.weightKg > 220) {
+      return res.status(400).json({
+        success: false,
+        code: 'PHYSIOLOGICAL_BOUNDARY_VIOLATION',
+        message: `Maternal weight (${visitInput.weightKg} kg) violates Table 4.4 physiological boundary (30–220 kg).`,
       });
     }
 
