@@ -247,6 +247,10 @@ export const idbPatientStore = {
   /**
    * Atomically saves or updates a list of patients within a single ACID transaction.
    */
+  /**
+   * Atomically synchronizes the list of patients for a clinic within a single ACID transaction.
+   * Purges any previously stored patients for this clinic that are no longer in the provided list.
+   */
   async savePatients(clinicId: string, patients: Patient[]): Promise<void> {
     const db = await openIndexedDB();
     if (!db) return;
@@ -260,15 +264,52 @@ export const idbPatientStore = {
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(new Error('Transaction aborted during savePatients'));
 
-        for (const patient of patients) {
-          // Ensure clinicId / tenantId is stamped
-          const p = {
-            ...patient,
-            clinicId: patient.clinicId || clinicId,
-            tenantId: patient.tenantId || clinicId,
-          };
-          store.put(p);
+        const newIdSet = new Set<string>();
+        for (const p of patients) {
+          if (p.id) {
+            newIdSet.add(p.id);
+            const trimmed = p.id.trim();
+            newIdSet.add(trimmed.startsWith('#') ? trimmed : `#${trimmed}`);
+            newIdSet.add(trimmed.startsWith('#') ? trimmed.substring(1) : trimmed);
+          }
         }
+
+        // 1. Query existing records for this clinic to delete removed/obsolete ones
+        const index = store.index('by_clinicId');
+        const req = index.getAll(clinicId);
+
+        req.onsuccess = () => {
+          const existing = (req.result as Patient[]) || [];
+          for (const item of existing) {
+            const trimmed = item.id ? item.id.trim() : '';
+            const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+            const withoutHash = trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
+
+            if (!newIdSet.has(item.id) && !newIdSet.has(withHash) && !newIdSet.has(withoutHash)) {
+              store.delete(item.id);
+            }
+          }
+
+          // 2. Put all active patients
+          for (const patient of patients) {
+            const p = {
+              ...patient,
+              clinicId: patient.clinicId || clinicId,
+              tenantId: patient.tenantId || clinicId,
+            };
+            store.put(p);
+          }
+        };
+
+        req.onerror = () => {
+          for (const patient of patients) {
+            store.put({
+              ...patient,
+              clinicId: patient.clinicId || clinicId,
+              tenantId: patient.tenantId || clinicId,
+            });
+          }
+        };
       } catch (err) {
         reject(err);
       }
@@ -285,7 +326,15 @@ export const idbPatientStore = {
         const store = tx.objectStore(STORES.PATIENTS);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
-        store.delete(patientId);
+
+        // Delete both hashed and unhashed keys to prevent lingering duplicates
+        const trimmed = patientId.trim();
+        const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+        const withoutHash = trimmed.startsWith('#') ? trimmed.substring(1) : trimmed;
+
+        store.delete(trimmed);
+        store.delete(withHash);
+        store.delete(withoutHash);
       } catch (err) {
         reject(err);
       }
@@ -349,9 +398,11 @@ export const idbMutationStore = {
 
         request.onsuccess = () => {
           const existing = (request.result as QueuedOfflineMutation[]) || [];
+          const normPatientId = mutation.patientId.replace(/^#/, '');
           // Remove obsolete duplicate mutation of same type for this patient
           for (const item of existing) {
-            if (item.patientId === mutation.patientId && item.type === mutation.type) {
+            const itemPatientId = item.patientId.replace(/^#/, '');
+            if (itemPatientId === normPatientId && item.type === mutation.type) {
               store.delete(item.id);
             }
           }
@@ -374,6 +425,36 @@ export const idbMutationStore = {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         store.delete(id);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  async removeByPatient(clinicId: string, patientId: string, type?: OfflineMutationType): Promise<void> {
+    const db = await openIndexedDB();
+    if (!db) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORES.MUTATIONS, 'readwrite');
+        const store = tx.objectStore(STORES.MUTATIONS);
+        const index = store.index('by_clinicId');
+        const request = index.getAll(clinicId);
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+
+        request.onsuccess = () => {
+          const items = (request.result as QueuedOfflineMutation[]) || [];
+          const targetNorm = patientId.replace(/^#/, '');
+          for (const item of items) {
+            const itemNorm = item.patientId.replace(/^#/, '');
+            if (itemNorm === targetNorm && (!type || item.type === type)) {
+              store.delete(item.id);
+            }
+          }
+        };
       } catch (err) {
         reject(err);
       }

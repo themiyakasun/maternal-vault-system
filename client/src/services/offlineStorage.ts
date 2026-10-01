@@ -122,6 +122,32 @@ export const offlineStorage = {
     }
   },
 
+  /**
+   * Immediately deletes a patient from memory cache, fallback storage, and IndexedDB.
+   */
+  async deleteCachedPatient(clinicId: string, patientId: string): Promise<void> {
+    const norm = patientId.trim().replace(/^#/, '');
+    // 1. Instant update to memory cache
+    const current = memoryPatientCache.get(clinicId) || [];
+    const updated = current.filter((p) => {
+      const pNorm = (p.id || '').trim().replace(/^#/, '');
+      return pNorm !== norm;
+    });
+    memoryPatientCache.set(clinicId, updated);
+
+    // 2. Update fallback storage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`mv_cached_patients_${clinicId}`, JSON.stringify(updated));
+      }
+    } catch {}
+
+    // 3. Atomically remove from IndexedDB
+    if (isIndexedDBAvailable()) {
+      await idbPatientStore.deletePatient(patientId);
+    }
+  },
+
   // =========================================================================
   // 2. Transaction-Safe Offline Mutation Queue
   // =========================================================================
@@ -172,7 +198,7 @@ export const offlineStorage = {
     return this.getOfflineQueue(clinicId);
   },
 
-  enqueueMutation(mutation: Omit<QueuedOfflineMutation, 'id' | 'createdAt' | 'retryCount'>): void {
+  async enqueueMutation(mutation: Omit<QueuedOfflineMutation, 'id' | 'createdAt' | 'retryCount'>): Promise<void> {
     const newAction: QueuedOfflineMutation = {
       ...mutation,
       id: `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -180,19 +206,23 @@ export const offlineStorage = {
       retryCount: 0,
     };
 
+    const normPatientId = mutation.patientId.replace(/^#/, '');
+
     // 1. Update in-memory queue
     const currentQueue = memoryMutationQueue.get(mutation.clinicId) || [];
     const filtered = currentQueue.filter(
-      (item) => !(item.patientId === mutation.patientId && item.type === mutation.type)
+      (item) => !(item.patientId.replace(/^#/, '') === normPatientId && item.type === mutation.type)
     );
     filtered.push(newAction);
     memoryMutationQueue.set(mutation.clinicId, filtered);
 
     // 2. Commit transaction to IndexedDB
     if (isIndexedDBAvailable()) {
-      idbMutationStore.enqueue(newAction).catch((err) => {
+      try {
+        await idbMutationStore.enqueue(newAction);
+      } catch (err) {
         console.warn('Failed to enqueue mutation into IndexedDB:', err);
-      });
+      }
     }
 
     // 3. Request Autonomous Background Sync Worker (Section 4.2.3 & TC-08)
@@ -212,6 +242,25 @@ export const offlineStorage = {
       idbMutationStore.remove(actionId).catch((err) => {
         console.warn('Failed to remove mutation from IndexedDB:', err);
       });
+    }
+  },
+
+  async removeMutationByPatient(clinicId: string, patientId: string, type?: OfflineMutationType): Promise<void> {
+    const targetNorm = patientId.replace(/^#/, '');
+    // 1. Update memory
+    const currentQueue = memoryMutationQueue.get(clinicId) || [];
+    const filtered = currentQueue.filter(
+      (item) => !(item.patientId.replace(/^#/, '') === targetNorm && (!type || item.type === type))
+    );
+    memoryMutationQueue.set(clinicId, filtered);
+
+    // 2. Remove from IndexedDB
+    if (isIndexedDBAvailable()) {
+      try {
+        await idbMutationStore.removeByPatient(clinicId, patientId, type);
+      } catch (err) {
+        console.warn('Failed to remove mutation from IndexedDB:', err);
+      }
     }
   },
 
@@ -290,26 +339,78 @@ export const offlineStorage = {
     clinicId: string
   ): Patient[] {
     const queue = this.getOfflineQueue(clinicId);
-    const deletedPatientIds = new Set(
-      queue.filter((q) => q.type === 'DELETE_PATIENT').map((q) => q.patientId)
+
+    const normalize = (id?: string) => {
+      if (!id) return '';
+      const trimmed = id.trim();
+      return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+    };
+
+    const deletedPatientIds = new Set<string>();
+    for (const q of queue) {
+      if (q.type === 'DELETE_PATIENT') {
+        deletedPatientIds.add(q.patientId);
+        deletedPatientIds.add(normalize(q.patientId));
+      }
+    }
+
+    // 1. Filter out patients that have a pending offline deletion
+    const filteredServer = serverList.filter(
+      (p) => !deletedPatientIds.has(p.id) && !deletedPatientIds.has(normalize(p.id))
     );
 
-    // Filter out any patients that have a pending offline deletion
-    const filteredServer = serverList.filter((p) => !deletedPatientIds.has(p.id));
-    const serverIdSet = new Set(filteredServer.map((p) => p.id));
+    const serverIdSet = new Set(filteredServer.map((p) => normalize(p.id)));
+    const serverNicSet = new Set(
+      filteredServer
+        .map((p) => p.nicNo?.trim().toUpperCase())
+        .filter((nic): nic is string => Boolean(nic))
+    );
 
-    // Retain any local patient that is not yet on the server, provided it was not explicitly deleted
-    const unpushedLocalPatients = currentLocalList.filter((p) => {
-      if (deletedPatientIds.has(p.id)) return false;
-      return !serverIdSet.has(p.id);
+    // 2. Retain only genuinely un-synced local patients:
+    // - Must not have a pending deletion
+    // - Must not already exist on the server by ID or NIC
+    // - Must NOT be a record previously marked 'synced-p2p' that the server no longer has (meaning deleted)
+    const localForClinic = (currentLocalList || []).filter(
+      (p) => !p.clinicId || !p.tenantId || p.clinicId === clinicId || p.tenantId === clinicId
+    );
+
+    const unpushedLocalPatients = localForClinic.filter((p) => {
+      const normId = normalize(p.id);
+      if (deletedPatientIds.has(p.id) || deletedPatientIds.has(normId)) return false;
+      if (serverIdSet.has(normId)) return false;
+      if (p.nicNo && serverNicSet.has(p.nicNo.trim().toUpperCase())) return false;
+
+      // If this record was already synchronized to the server, and the server no longer returns it,
+      // it was deleted from the central database. Do NOT resurrect it!
+      if (p.syncStatus === 'synced-p2p') return false;
+
+      return true;
     });
 
-    // Merge: unpushed local patients stay at the top so they never disappear
-    const mergedList = [...unpushedLocalPatients, ...filteredServer];
+    // 3. Combine: unpushed local entries stay at the top
+    const combined = [...unpushedLocalPatients, ...filteredServer];
 
-    // Persist to IndexedDB
-    this.saveCachedPatients(clinicId, mergedList);
+    // 4. Strict deduplication by normalized ID and NIC
+    const seenIds = new Set<string>();
+    const seenNics = new Set<string>();
+    const deduplicated: Patient[] = [];
 
-    return mergedList;
+    for (const patient of combined) {
+      const normId = normalize(patient.id);
+      const cleanNic = patient.nicNo ? patient.nicNo.trim().toUpperCase() : null;
+
+      if (seenIds.has(normId)) continue;
+      if (cleanNic && seenNics.has(cleanNic)) continue;
+
+      seenIds.add(normId);
+      if (cleanNic) seenNics.add(cleanNic);
+
+      deduplicated.push(patient);
+    }
+
+    // 5. Persist clean deduplicated list to IndexedDB & memory cache
+    this.saveCachedPatients(clinicId, deduplicated);
+
+    return deduplicated;
   },
 };

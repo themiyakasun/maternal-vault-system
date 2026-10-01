@@ -120,7 +120,16 @@ function decryptAndLoad(): Patient[] {
       fileSize: stats.size,
     };
 
-    return JSON.parse(decrypted);
+    const patients: Patient[] = JSON.parse(decrypted);
+    for (const p of patients) {
+      if (!p.tenantId) {
+        p.tenantId = p.clinicId || 'clinic-4b-rampur';
+      }
+      if (!p.clinicId) {
+        p.clinicId = p.tenantId || 'clinic-4b-rampur';
+      }
+    }
+    return patients;
   } catch (err) {
     console.warn('⚠️  Could not decrypt existing local database (station key changed or fresh deployment). Initializing fresh store.');
     encryptAndSave(initialSeedPatients);
@@ -153,7 +162,7 @@ export const localEncryptedDb = {
     if (opts.tenantId && opts.tenantId !== 'all') {
       filtered = filtered.filter(p => {
         const pTenant = p.tenantId || p.clinicId;
-        return !pTenant || pTenant === opts.tenantId;
+        return pTenant === opts.tenantId;
       });
     }
 
@@ -218,19 +227,24 @@ export const localEncryptedDb = {
 
   // Insert or upsert a patient
   insert(patient: Patient): Patient {
-    const existingIdx = localPatientsCache.findIndex(p => p.id === patient.id);
+    const stampedPatient: Patient = {
+      ...patient,
+      tenantId: patient.tenantId || patient.clinicId || 'clinic-4b-rampur',
+      clinicId: patient.clinicId || patient.tenantId || 'clinic-4b-rampur',
+    };
+    const existingIdx = localPatientsCache.findIndex(p => p.id === stampedPatient.id);
     if (existingIdx !== -1) {
       localPatientsCache[existingIdx] = {
         ...localPatientsCache[existingIdx],
-        ...patient,
-        updatedAt: patient.updatedAt || new Date().toISOString(),
+        ...stampedPatient,
+        updatedAt: stampedPatient.updatedAt || new Date().toISOString(),
       };
     } else {
-      localPatientsCache.unshift(patient);
+      localPatientsCache.unshift(stampedPatient);
     }
     dbRevision++;
     encryptAndSave(localPatientsCache);
-    return patient;
+    return stampedPatient;
   },
 
   // Update existing patient

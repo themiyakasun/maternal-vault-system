@@ -480,16 +480,15 @@ export const deletePatient = async (req: Request, res: Response) => {
     }
 
     // Immediately propagate deletion to PostgreSQL if online
-    probePostgres().then(async online => {
-      if (online) {
-        try {
-          const ok = await deleteFromPostgres(id, tenantId);
-          if (ok) localEncryptedDb.clearPendingDeletion(id);
-        } catch (err) {
-          console.warn('PostgreSQL direct delete failed, queued for background sync:', err);
-        }
+    try {
+      const isOnline = await probePostgres();
+      if (isOnline) {
+        const ok = await deleteFromPostgres(id, tenantId);
+        if (ok) localEncryptedDb.clearPendingDeletion(id);
       }
-    });
+    } catch (err) {
+      console.warn('PostgreSQL direct delete failed, queued for background sync:', err);
+    }
 
     return res.json({
       success: true,

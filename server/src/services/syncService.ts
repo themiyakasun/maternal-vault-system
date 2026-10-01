@@ -327,7 +327,10 @@ export async function deleteFromPostgres(id: string, tenantId?: string): Promise
   try {
     const client = await pool.connect();
     if (tenantId && tenantId !== 'all') {
-      await client.query('DELETE FROM patients WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query(
+        'DELETE FROM patients WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)',
+        [id, tenantId]
+      );
     } else {
       await client.query('DELETE FROM patients WHERE id = $1', [id]);
     }

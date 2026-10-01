@@ -70,6 +70,8 @@ function DashboardContent() {
       setPatients(cachedPatients);
       setSelectedPatientId(cachedPatients[0].id);
     } else {
+      setPatients([]);
+      setSelectedPatientId('');
       // Async load from IndexedDB object store
       offlineStorage.loadCachedPatientsAsync(cid).then((idbPatients) => {
         if (isMounted && idbPatients.length > 0) {
@@ -257,17 +259,16 @@ function DashboardContent() {
     const patientName = targetPatient?.name || patientId;
     const cid = activeClinicId;
 
-    // 1. Immediately update React memory state & browser persistent cache
+    // 1. Immediately update React memory state
     setPatients((prev) => {
-      const updatedList = prev.filter((p) => p.id !== patientId);
-      offlineStorage.saveCachedPatients(cid, updatedList);
+      const updatedList = prev.filter((p) => p.id !== patientId && p.id !== patientId.replace(/^#/, ''));
       return updatedList;
     });
 
     // 2. Clear selected IDs and close associated open modals
     setSelectedPatientId((prev) => {
-      if (prev === patientId) {
-        const remaining = patients.filter((p) => p.id !== patientId);
+      if (prev === patientId || prev === patientId.replace(/^#/, '')) {
+        const remaining = patients.filter((p) => p.id !== patientId && p.id !== patientId.replace(/^#/, ''));
         return remaining.length > 0 ? remaining[0].id : '';
       }
       return prev;
@@ -286,28 +287,26 @@ function DashboardContent() {
       setSelectedVisitPatient(null);
     }
 
-    // 3. Queue offline deletion in persistent queue
-    offlineStorage.enqueueMutation({
+    // 3. Atomically purge from IndexedDB and browser persistent cache
+    await offlineStorage.deleteCachedPatient(cid, patientId);
+
+    // 4. Queue offline deletion in persistent queue
+    await offlineStorage.enqueueMutation({
       type: 'DELETE_PATIENT',
       clinicId: cid,
       patientId,
       payload: { id: patientId },
     });
 
-    // 4. Close delete modal & notify user
+    // 5. Close delete modal & notify user
     setIsDeleteModalOpen(false);
     setSelectedDeletePatient(null);
     showToast(`Mother ${patientName} (${patientId}) removed from clinic vault.`);
 
-    // 5. Attempt remote deletion from server
+    // 6. Attempt remote deletion from server & remove queued mutation on success
     try {
       await patientApi.deletePatient(patientId, cid);
-      const action = offlineStorage.getOfflineQueue(cid).find(
-        (q) => q.patientId === patientId && q.type === 'DELETE_PATIENT'
-      );
-      if (action) {
-        offlineStorage.removeMutation(action.id, cid);
-      }
+      await offlineStorage.removeMutationByPatient(cid, patientId, 'DELETE_PATIENT');
     } catch (err) {
       console.warn('Backend API delete offline (queued for sync):', err);
     }
@@ -496,7 +495,7 @@ function DashboardContent() {
     showToast(`Mother ${offlinePatient.name} registered in encrypted vault.`);
 
     // 2. Queue in persistent offline mutation store
-    offlineStorage.enqueueMutation({
+    await offlineStorage.enqueueMutation({
       type: 'CREATE_PATIENT',
       clinicId: cid,
       patientId: offlinePatient.id,
@@ -513,30 +512,48 @@ function DashboardContent() {
           offlineStorage.saveCachedPatients(cid, rolledBack);
           return rolledBack;
         });
-        const action = offlineStorage.getOfflineQueue(cid).find(
-          (q) => q.patientId === offlinePatient.id && q.type === 'CREATE_PATIENT'
-        );
-        if (action) {
-          offlineStorage.removeMutation(action.id, cid);
-        }
+        await offlineStorage.deleteCachedPatient(cid, offlinePatient.id);
+        await offlineStorage.removeMutationByPatient(cid, offlinePatient.id, 'CREATE_PATIENT');
         showToast(res.message || 'Cannot register: Mother with this NIC is already registered.');
         return;
       }
 
       if (res?.success && res?.data) {
         const serverPatient: Patient = res.data;
-        const action = offlineStorage.getOfflineQueue(cid).find(
-          (q) => q.patientId === offlinePatient.id && q.type === 'CREATE_PATIENT'
-        );
-        if (action) {
-          offlineStorage.removeMutation(action.id, cid);
+        // Purge queued create mutation immediately so background sync won't recreate it
+        await offlineStorage.removeMutationByPatient(cid, offlinePatient.id, 'CREATE_PATIENT');
+        if (serverPatient.id !== offlinePatient.id) {
+          await offlineStorage.deleteCachedPatient(cid, offlinePatient.id);
+          await offlineStorage.removeMutationByPatient(cid, serverPatient.id, 'CREATE_PATIENT');
         }
+
         setPatients((prev) => {
-          const updatedList = prev.map((p) =>
-            p.id === offlinePatient.id || p.id === serverPatient.id ? serverPatient : p
-          );
-          offlineStorage.saveCachedPatients(cid, updatedList);
-          return updatedList;
+          const normOffline = offlinePatient.id.replace(/^#/, '');
+          const normServer = serverPatient.id.replace(/^#/, '');
+          const cleanServerNic = serverPatient.nicNo ? serverPatient.nicNo.trim().toUpperCase() : null;
+
+          const updatedList = prev.map((p) => {
+            const pNorm = (p.id || '').replace(/^#/, '');
+            const pNic = p.nicNo ? p.nicNo.trim().toUpperCase() : null;
+            if (pNorm === normOffline || pNorm === normServer || (cleanServerNic && pNic === cleanServerNic)) {
+              return serverPatient;
+            }
+            return p;
+          });
+
+          // Strict deduplication
+          const seen = new Set<string>();
+          const deduped: Patient[] = [];
+          for (const item of updatedList) {
+            const norm = (item.id || '').replace(/^#/, '');
+            if (!seen.has(norm)) {
+              seen.add(norm);
+              deduped.push(item);
+            }
+          }
+
+          offlineStorage.saveCachedPatients(cid, deduped);
+          return deduped;
         });
       }
     } catch (err) {
