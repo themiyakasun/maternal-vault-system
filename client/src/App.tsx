@@ -20,7 +20,6 @@ import { MobileBottomNav } from './components/Navigation/MobileBottomNav';
 
 
 // Patient Records Page Components
-import { OCRNoticeBanner } from './components/PatientRecords/OCRNoticeBanner';
 import { MaternalRecordsStats } from './components/PatientRecords/MaternalRecordsStats';
 import { RecordsFilterToolbar } from './components/PatientRecords/RecordsFilterToolbar';
 import { PatientRecordsTable } from './components/PatientRecords/PatientRecordsTable';
@@ -654,16 +653,15 @@ function DashboardContent() {
         {activeNavTab === 'records' ? (
           /* =================== PATIENT RECORDS PAGE =================== */
           <main className="flex-1 p-3.5 sm:p-6 pb-24 md:pb-6 space-y-3.5 sm:space-y-4 max-w-[1440px] mx-auto w-full">
-            {/* Quick OCR Notice Banner */}
-            <OCRNoticeBanner onInitiateScan={() => setIsIntakeOpen(true)} />
-
             {/* Page Header & Action Bar */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
               <div>
-                <div className="flex items-center gap-2 text-[10.5px] font-bold text-[#006194] uppercase tracking-wider mb-1">
-                  <span>Primary Health Post 4B • Rampur Division</span>
+                <div className="flex items-center gap-2 text-[10.5px] font-bold text-[#006194] uppercase tracking-wider mb-1 flex-wrap">
+                  <span>{currentClinic?.name || 'Primary Health Post 4B'} • {currentClinic?.division || 'Rampur Division'}</span>
                   <span className="text-[#cbd5e1]">•</span>
-                  <span>Midwife Station 71</span>
+                  <span>{currentClinic?.mohArea || 'MOH Rampur'}</span>
+                  <span className="text-[#cbd5e1]">•</span>
+                  <span>Midwife Station {currentUser?.id?.replace(/[^0-9]/g, '') || '71'}</span>
                 </div>
 
                 <h1 className="text-2xl lg:text-[28px] font-extrabold text-[#0f172a] tracking-tight leading-tight">
@@ -671,7 +669,7 @@ function DashboardContent() {
                 </h1>
 
                 <p className="text-xs text-[#64748b] mt-0.5 leading-relaxed">
-                  Complete maternal clinic roster with auto-saving offline tablet storage, card scanner, and mobile QR transfer.
+                  Complete maternal clinic roster with auto-saving offline tablet storage, encrypted health records, and mobile QR transfer.
                 </p>
               </div>
 
@@ -700,7 +698,7 @@ function DashboardContent() {
                   className="flex items-center justify-center gap-2 bg-[#006194] hover:bg-[#004f7b] text-white px-4 py-2.5 rounded-lg font-bold text-xs transition-all shadow-2xs cursor-pointer active:scale-98"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Add Mother (Scan Card)</span>
+                  <span>+ Register New Mother</span>
                 </button>
               </div>
             </div>
@@ -762,7 +760,7 @@ function DashboardContent() {
                 {/* Node & Model Badges */}
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="bg-[#eaedff] text-[#004b73] text-[11px] font-bold px-2.5 py-0.5 rounded border border-[#dae2fd]">
-                    Clinic 4B • Rampur Division
+                    {currentClinic?.name || 'Clinic 4B'} • {currentClinic?.division || 'Rampur Division'}
                   </span>
                   <span className="bg-[#dcfce7] text-[#15803d] text-[11px] font-bold px-2.5 py-0.5 rounded border border-[#bbf7d0] flex items-center gap-1">
                     <Zap className="w-3 h-3 fill-[#16a34a] text-[#16a34a]" />
@@ -790,8 +788,8 @@ function DashboardContent() {
                 {/* Subtitle */}
                 <p className="text-xs text-[#64748b] mt-1 max-w-3xl leading-relaxed">
                   {currentUser?.role === 'doctor' || currentUser?.role === 'admin'
-                    ? 'Supervisory medical oversight and high-risk case evaluation across Rampur Division clinics. Authoritative review tier.'
-                    : 'Village Zone: Rampur Sector 3 • Mothers ordered by clinical priority and upcoming due dates. Operates completely offline on tablet.'}
+                    ? `Supervisory medical oversight and high-risk case evaluation across ${currentClinic?.division || 'Rampur Division'} clinics. Authoritative review tier.`
+                    : `Zone: ${currentClinic?.name || 'Local Clinic'} • ${currentClinic?.mohArea || 'MOH Area'} • Mothers ordered by clinical priority and upcoming due dates. Operates completely offline on tablet.`}
                 </p>
               </div>
 

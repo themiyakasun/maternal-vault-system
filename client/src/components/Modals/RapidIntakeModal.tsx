@@ -4,21 +4,17 @@ import { useAuth } from '../../context/AuthContext';
 import { formatDbDate, formatDisplayDate } from '../../utils/dateUtils';
 import { 
   X, 
-  Camera, 
   Sparkles, 
-  Scan, 
   User, 
   Calendar, 
   Activity, 
   Baby, 
   ShieldCheck, 
   AlertTriangle, 
-  CheckCircle2, 
   Stethoscope, 
   Phone, 
   MapPin, 
   Building2, 
-  FileText,
   RefreshCw
 } from 'lucide-react';
 import { patientApi } from '../../services/patientApi';
@@ -38,9 +34,6 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
   existingPatients,
 }) => {
   const { currentClinic, currentUser } = useAuth();
-  const [activeMode, setActiveMode] = useState<'form' | 'ocr'>('form');
-  const [ocrScanning, setOcrScanning] = useState(false);
-  const [ocrSuccess, setOcrSuccess] = useState(false);
   const [activeSection, setActiveSection] = useState<'all' | 'demo' | 'dates' | 'vitals' | 'history' | 'plan'>('all');
   const [nicError, setNicError] = useState<string | null>(null);
   const [isCheckingNic, setIsCheckingNic] = useState(false);
@@ -147,10 +140,29 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     return () => clearTimeout(timer);
   }, [nicNo, existingPatients]);
   const [phmRegisterNo, setPhmRegisterNo] = useState('');
-  const [mohArea, setMohArea] = useState(currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur');
-  const [village, setVillage] = useState('Rampur North Sector 2');
-  const [locality, setLocality] = useState('GN Division 14');
+  const [mohArea, setMohArea] = useState(
+    currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur')
+  );
+  const [village, setVillage] = useState(currentClinic?.division || 'Rampur North Sector 2');
+  const [locality, setLocality] = useState(currentClinic?.name || 'GN Division 14');
   const [phone, setPhone] = useState('077 123 4567');
+
+  // Synchronize clinic and MOH area details whenever the modal is opened or the active clinic changes
+  useEffect(() => {
+    if (isOpen && currentClinic) {
+      if (currentClinic.mohArea) {
+        setMohArea(currentClinic.mohArea);
+      } else if (currentClinic.name) {
+        setMohArea(`${currentClinic.name} MOH`);
+      }
+      if (currentClinic.division) {
+        setVillage(currentClinic.division);
+      }
+      if (currentClinic.name) {
+        setLocality(currentClinic.name);
+      }
+    }
+  }, [isOpen, currentClinic]);
   const [partnerName, setPartnerName] = useState('');
   const [partnerAge, setPartnerAge] = useState('29');
   const [partnerOccupation, setPartnerOccupation] = useState('Agriculture / Daily Trade');
@@ -332,9 +344,9 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     setDob('1998-05-14');
     setNicNo('199864201234');
     setPhmRegisterNo('PHM/2026/042');
-    setMohArea('MOH Rampur / Division 4B');
-    setVillage('Rampur North Sector 2');
-    setLocality('GN Division 14');
+    setMohArea(currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur / Division 4B'));
+    setVillage(currentClinic?.division || 'Rampur North Sector 2');
+    setLocality(currentClinic?.name || 'GN Division 14');
     setPhone('077 234 5678');
     setPartnerName('Sunil Shantha');
     setPartnerAge('30');
@@ -381,64 +393,9 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     setVaginalBleeding(false);
     setReducedMovements(false);
     setEdema(false);
-    setIntendedHospital('Base Hospital Rampur (Specialist Unit)');
+    setIntendedHospital(currentClinic?.district ? `Base Hospital ${currentClinic.district}` : 'Base Hospital Rampur (Specialist Unit)');
     setEmergencyTransportReady(true);
     setNotes('Healthy primipara progression. Baseline blood group confirmed B +ve. Folic acid and IFA issued.');
-  };
-
-  // Simulate OCR scan
-  const simulateOcrScan = () => {
-    setOcrScanning(true);
-    setOcrSuccess(false);
-
-    setTimeout(() => {
-      setRecordDate('2024-03-10');
-      setName('Geeta Devi Samarawickrama');
-      setAge('28');
-      setDob('1996-08-20');
-      setNicNo('199678301920');
-      setPhmRegisterNo('PHM/2026/089');
-      setMohArea('MOH Rampur / Sector 4B');
-      setVillage('Rampur East Sector 4');
-      setLocality('GN Division 08');
-      setPhone('071 890 1234');
-      setPartnerName('Ramesh Samarawickrama');
-      setPartnerAge('32');
-      setPartnerOccupation('Tea Estate Supervisor');
-      setLmp('2024-03-10');
-      setEdd('2024-12-15');
-      setPoaAtBooking('9w 0d');
-      setWeeks('32');
-      setDays('1');
-      setHeightCm('154');
-      setWeightKg('68.0');
-      setBloodGroup('O -ve');
-      setSystolic('146');
-      setDiastolic('94');
-      setHb('10.2');
-      setFundalHeight('32');
-      setFhr('148');
-      setUrineAlbumin('1+');
-      setUrineSugar('Nil');
-      setGravida('3');
-      setPara('1');
-      setLivingChildren('1');
-      setAbortions('1');
-      setPrevLscs(false);
-      setPrevPreterm(true);
-      setPrevPph(false);
-      setStillbirth(false);
-      setSevereHeadache(true);
-      setBlurredVision(true);
-      setEdema(true);
-      setIntendedHospital('Teaching Hospital Kandy (Specialist Care)');
-      setEmergencyTransportReady(true);
-      setNotes('OCR Paper Card Extracted: Blood group O -ve (Rh Negative Alert). Elevated BP 146/94 and frontal headache flagged.');
-      
-      setOcrScanning(false);
-      setOcrSuccess(true);
-      setActiveMode('form');
-    }, 1200);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -552,9 +509,9 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
       dob: dob ? formatDbDate(dob) : undefined,
       nicNo: nicNo.trim() || undefined,
       phmRegisterNo: phmRegisterNo.trim() || `PHM/2026/${newId.replace('#', '')}`,
-      mohArea: mohArea.trim() || 'MOH Rampur',
-      village: village.trim() || 'Rampur North Sector 2',
-      locality: locality.trim() || 'GN Division 14',
+      mohArea: mohArea.trim() || currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur'),
+      village: village.trim() || currentClinic?.division || 'Rampur North Sector 2',
+      locality: locality.trim() || currentClinic?.name || 'GN Division 14',
       phone: phone.trim() || undefined,
       partnerName: partnerName.trim() || undefined,
       partnerAge: parseInt(partnerAge, 10) || undefined,
@@ -597,7 +554,7 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
       prevLscs,
       prevPreterm,
       prevPph,
-      intendedHospital: intendedHospital || 'Base Hospital Rampur',
+      intendedHospital: intendedHospital || (currentClinic?.district ? `Base Hospital ${currentClinic.district}` : 'Base Hospital Rampur'),
       emergencyTransportReady,
       dangerSignsPresent: [
         ...(severeHeadache ? ['Severe headache'] : []),
@@ -657,7 +614,7 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
         <div className="bg-[#006194] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center text-white shadow-inner">
-              <Scan className="w-5 h-5" />
+              <Baby className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -690,33 +647,19 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
           </button>
         </div>
 
-        {/* Top Action & Mode Switcher Bar */}
-        <div className="flex flex-wrap items-center justify-between border-b border-[#e2e8f0] bg-[#f8fafc] px-4 sm:px-6 py-2 gap-2 text-xs">
-          <div className="flex rounded-lg bg-slate-200/80 p-0.5 font-semibold">
-            <button
-              type="button"
-              onClick={() => setActiveMode('form')}
-              className={`px-3.5 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeMode === 'form'
-                  ? 'bg-white text-[#006194] shadow-xs font-bold'
-                  : 'text-[#64748b] hover:text-[#0f172a]'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Complete H 512 B Form
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveMode('ocr')}
-              className={`px-3.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeMode === 'ocr'
-                  ? 'bg-white text-[#006194] shadow-xs font-bold'
-                  : 'text-[#64748b] hover:text-[#0f172a]'
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5 text-[#006194]" />
-              Scan Paper MCP Card
-            </button>
+        {/* Top Action Bar */}
+        <div className="flex flex-wrap items-center justify-between border-b border-[#e2e8f0] bg-[#f8fafc] px-4 sm:px-6 py-2.5 gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#334155]">
+            <Building2 className="w-4 h-4 text-[#006194]" />
+            <span className="text-[#64748b]">Jurisdiction:</span>
+            <span className="font-bold text-[#006194] bg-[#e0f2fe] px-2 py-0.5 rounded border border-[#bae6fd]">
+              {currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur')}
+            </span>
+            {currentClinic?.division && (
+              <span className="hidden sm:inline-block text-[#64748b]">
+                • {currentClinic.division}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -732,51 +675,9 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
           </div>
         </div>
 
-        {/* Form Content / OCR Scanner */}
+        {/* Form Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {activeMode === 'ocr' ? (
-            <div className="text-center py-10 space-y-5 max-w-lg mx-auto">
-              <div className="w-24 h-24 mx-auto rounded-2xl bg-[#e0f2fe] border-2 border-dashed border-[#0284c7] flex items-center justify-center text-[#0284c7] shadow-inner">
-                <Camera className={`w-10 h-10 ${ocrScanning ? 'animate-bounce text-[#006194]' : ''}`} />
-              </div>
-
-              <div>
-                <h4 className="text-base font-bold text-[#0f172a]">
-                  OCR Camera Scanner for Mother-Child Protection Card
-                </h4>
-                <p className="text-xs text-[#64748b] mt-1.5 leading-relaxed">
-                  Position the printed Sri Lankan H 512 B or MCP Card in front of your camera. On-device vision OCR extracts all clinical demographic numbers, vitals, LMP dates, and laboratory tests without transmitting sensitive PHI data.
-                </p>
-              </div>
-
-              {ocrScanning && (
-                <div className="inline-flex items-center gap-2 bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0] px-4 py-2 rounded-full text-xs font-semibold animate-pulse shadow-xs">
-                  <RefreshCw className="w-4 h-4 animate-spin text-[#16a34a]" />
-                  Processing card image & recognizing handwriting...
-                </div>
-              )}
-
-              {ocrSuccess && (
-                <div className="inline-flex items-center gap-2 bg-[#dcfce7] text-[#14532d] border border-[#86efac] px-4 py-2 rounded-lg text-xs font-bold shadow-xs">
-                  <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
-                  Card recognized successfully! All registration fields populated.
-                </div>
-              )}
-
-              <div className="pt-3">
-                <button
-                  type="button"
-                  onClick={simulateOcrScan}
-                  disabled={ocrScanning}
-                  className="bg-[#006194] hover:bg-[#004f7b] disabled:opacity-50 text-white px-6 py-3 rounded-lg text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 mx-auto cursor-pointer"
-                >
-                  <Scan className="w-4 h-4" />
-                  {ocrScanning ? 'Scanning Card Image...' : 'Capture & Extract Card Data'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form id="maternal-intake-form" onSubmit={handleSubmit} className="space-y-6">
+          <form id="maternal-intake-form" onSubmit={handleSubmit} className="space-y-6">
 
               {/* Section Jump Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
@@ -1926,9 +1827,7 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
                   </div>
                 </div>
               </div>
-
             </form>
-          )}
         </div>
 
         {/* Modal Sticky Footer Actions */}
