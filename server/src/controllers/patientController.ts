@@ -904,7 +904,15 @@ export const compressVaultForQR = (vault: any) => {
     rt: vault.risk?.tier ?? vault.riskTier,
     rc: vault.risk?.cond ?? vault.specificCondition,
     rp: vault.risk?.prob ?? vault.pretermProbability,
-    pt: vault.partner?.name ?? vault.partnerName,
+    pt: vault.partner?.name ?? vault.partnerName ?? '',
+    pto: vault.partner?.occupation ?? vault.partnerOccupation ?? '',
+    pta: vault.partner?.age ?? vault.partnerAge ?? null,
+    moh: vault.mohArea ?? vault.moh ?? '',
+    vil: vault.village ?? vault.locality ?? vault.address ?? '',
+    loc: vault.locality ?? vault.village ?? '',
+    phm: vault.phmRegisterNo ?? vault.phmArea ?? '',
+    nic: vault.nicNo ?? vault.nic ?? vault.nationalId ?? '',
+    ph: vault.phone ?? vault.phoneNumber ?? '',
     mh: vault.medicalHistory,
     lr: vault.labResults,
     pr: (vault.pregnancies || []).map((p: any) => [
@@ -1257,7 +1265,12 @@ export const getPatientMobileView = async (req: Request, res: Response) => {
           </div>
 
           <div class="pill-field">
-            <label class="pill-label">Address</label>
+            <label class="pill-label">MOH Area &amp; Division</label>
+            <div class="pill-input">${patient.mohArea || 'MOH Rampur'} ${patient.village || patient.locality ? `• ${patient.village || patient.locality}` : ''}</div>
+          </div>
+
+          <div class="pill-field">
+            <label class="pill-label">Residential Address</label>
             <div class="pill-input">${patient.village || patient.locality || 'Rampur North Sector 2'}</div>
           </div>
 
@@ -1272,8 +1285,8 @@ export const getPatientMobileView = async (req: Request, res: Response) => {
           </div>
 
           <div class="pill-field" style="margin-bottom: 0;">
-            <label class="pill-label">Partner / Spouse</label>
-            <div class="pill-input">${patient.partnerName || 'None documented'} ${patient.partnerAge ? `(${patient.partnerAge}y)` : ''} ${patient.partnerOccupation ? `• ${patient.partnerOccupation}` : ''}</div>
+            <label class="pill-label">Partner / Father's Details</label>
+            <div class="pill-input">${patient.partnerName || 'None documented'} ${patient.partnerAge ? `(${patient.partnerAge}y)` : ''} ${patient.partnerOccupation ? `• Occupation: ${patient.partnerOccupation}` : ''}</div>
           </div>
         </div>
       </div>
