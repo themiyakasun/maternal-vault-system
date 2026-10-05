@@ -314,6 +314,15 @@ function DashboardContent() {
 
   const handleSaveClinicVisit = async (patientId: string, visitData: ANCVisitInput) => {
     const cid = activeClinicId;
+    const targetPatient = patients.find((p) => p.id === patientId);
+    const visitDateStr = formatDbDate(visitData.date);
+    const existingVisits = targetPatient?.ancVisits || [];
+    if (existingVisits.some((v) => v.date && formatDbDate(v.date) === visitDateStr)) {
+      throw new Error(
+        `Duplicate Visit Conflict: A clinic visit is already recorded for this patient on ${visitDateStr}. Duplicate visits on the same date are not allowed.`
+      );
+    }
+
     try {
       // 1. Queue offline visit mutation first (returns unique mutationId)
       const mutationId = await offlineStorage.enqueueMutation({

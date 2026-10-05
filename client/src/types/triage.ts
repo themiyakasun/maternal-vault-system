@@ -11,6 +11,8 @@ export interface ANCVisit {
   visitNo: number;
   date: string;
   poa: string;
+  gestationalWeeks?: number;
+  gestationalDays?: number;
   weightKg: number;
   bp: string;
   sfhCm: string;
@@ -152,6 +154,7 @@ export interface Patient {
 
   // H 512 B Official Pregnancy Record Book Fields
   registrationDate?: string;
+  recordDate?: string;
   bloodGroup?: string;
   lmp?: string;
   poaAtBooking?: string;

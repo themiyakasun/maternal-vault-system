@@ -325,6 +325,30 @@ describe('6. Full End-to-End API Integration Testing', () => {
       );
     });
 
+    it('POST /api/patients/:id/visits should reject duplicate visit on the same date with 409 Conflict', async () => {
+      const duplicatePayload = {
+        date: '2026-09-28', // Same date as previous visit
+        weightKg: 65.0,
+        bpSystolic: 120,
+        bpDiastolic: 80,
+      };
+
+      const res = await fetch(
+        `${baseUrl}/api/patients/${encodeURIComponent(testPatientId)}/visits`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(duplicatePayload),
+        },
+      );
+
+      assert.strictEqual(res.status, 409);
+      const json = (await res.json()) as { success: boolean; code: string; message: string };
+      assert.strictEqual(json.success, false);
+      assert.strictEqual(json.code, 'DUPLICATE_VISIT');
+      assert.ok(json.message.includes('already recorded'));
+    });
+
     it('POST /api/patients/:id/evaluate-risk should recalculate 3-model risk on demand', async () => {
       const res = await fetch(
         `${baseUrl}/api/patients/${encodeURIComponent(testPatientId)}/evaluate-risk`,

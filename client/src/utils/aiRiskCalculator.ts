@@ -1,4 +1,27 @@
 import type { Patient, RiskTier, RiskFeatureWeight, ANCVisit, ANCVisitInput, MLRiskAssessment } from '../types/triage';
+import { formatDbDate } from './dateUtils';
+
+export interface NextVisitProgression {
+  date: string;
+  gestationalWeeks: number;
+  gestationalDays: number;
+  weightKg: string;
+  bpSystolic: string;
+  bpDiastolic: string;
+  sfhCm: string;
+  presentation: string;
+  engagement: string;
+  fhr: string;
+  fm: string;
+  urineAlb: string;
+  urineSug: string;
+  edema: string;
+  remarks: string;
+  ifaIssued: boolean;
+  calciumIssued: boolean;
+  vitCIssued: boolean;
+  foodSupplement: boolean;
+}
 
 export interface CalculatedRisk {
   riskTier: RiskTier;
@@ -328,5 +351,194 @@ export function toMLRiskAssessment(
       model: 'ADASYN-XGB Prenatal Depression Screener',
     },
     evaluatedAt: calculated.evaluatedAt,
+  };
+}
+
+/**
+ * Computes progressive clinic visit vitals, gestational age, and next visit date,
+ * ensuring no duplicate dates with existing visits.
+ */
+export function calculateNextVisitProgression(
+  patient: Patient,
+  riskPreference: 'low' | 'moderate' | 'high' = 'low'
+): NextVisitProgression {
+  const existingVisits = patient.ancVisits || [];
+  const existingDates = new Set(
+    existingVisits
+      .map((v) => (v.date ? formatDbDate(v.date) : ''))
+      .filter(Boolean)
+  );
+
+  // 1. Determine baseline / previous visit
+  const lastVisit = existingVisits.length > 0 ? existingVisits[existingVisits.length - 1] : null;
+
+  // 2. Base Date determination
+  let baseDate: Date;
+  if (lastVisit?.date) {
+    const parsed = new Date(formatDbDate(lastVisit.date) + 'T00:00:00');
+    baseDate = isNaN(parsed.getTime()) ? new Date() : parsed;
+  } else if (patient.registrationDate || patient.recordDate) {
+    const regDateStr = patient.registrationDate || patient.recordDate || '';
+    const parsed = new Date(formatDbDate(regDateStr) + 'T00:00:00');
+    baseDate = isNaN(parsed.getTime()) ? new Date() : parsed;
+  } else {
+    baseDate = new Date();
+  }
+
+  // 3. Advancing interval in days
+  // Standard Antenatal guidelines:
+  // - High Risk: every 1-2 weeks (14 days)
+  // - Moderate Risk: every 2-3 weeks (21 days)
+  // - Low Risk:
+  //    * < 28 weeks: every 4 weeks (28 days)
+  //    * 28 - 36 weeks: every 2-3 weeks (21 days)
+  //    * >= 36 weeks: every 1-2 weeks (14 days)
+  const currentWeeks = lastVisit
+    ? (lastVisit.gestationalWeeks ?? (parseInt(String(lastVisit.poa), 10) || patient.gestationalWeeks || 28))
+    : (patient.gestationalWeeks || 28);
+  const currentDays = lastVisit
+    ? (lastVisit.gestationalDays ?? patient.gestationalDays ?? 0)
+    : (patient.gestationalDays ?? 0);
+
+  let stepDays = 28;
+  if (riskPreference === 'high') {
+    stepDays = 14;
+  } else if (riskPreference === 'moderate') {
+    stepDays = 21;
+  } else {
+    if (currentWeeks >= 36) {
+      stepDays = 14;
+    } else if (currentWeeks >= 28) {
+      stepDays = 21;
+    } else {
+      stepDays = 28;
+    }
+  }
+
+  // 4. Calculate candidate date and guarantee non-duplication
+  const targetDate = new Date(baseDate.getTime());
+  targetDate.setDate(targetDate.getDate() + (lastVisit ? stepDays : 0));
+
+  let candidateDateStr = formatDbDate(targetDate);
+
+  // If candidate date is already used, increment by 7 days until unique
+  while (existingDates.has(candidateDateStr)) {
+    targetDate.setDate(targetDate.getDate() + 7);
+    candidateDateStr = formatDbDate(targetDate);
+  }
+
+  // Calculate actual days advanced from previous visit
+  let actualDaysAdvanced = stepDays;
+  if (lastVisit?.date) {
+    const lastParsed = new Date(formatDbDate(lastVisit.date) + 'T00:00:00');
+    const candParsed = new Date(candidateDateStr + 'T00:00:00');
+    const diff = Math.round((candParsed.getTime() - lastParsed.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff > 0) {
+      actualDaysAdvanced = diff;
+    }
+  }
+
+  // 5. Advance Gestational Age (POA)
+  let nextWeeks = currentWeeks;
+  let nextDays = currentDays;
+  if (lastVisit) {
+    const totalDays = currentWeeks * 7 + currentDays + actualDaysAdvanced;
+    nextWeeks = Math.min(41, Math.floor(totalDays / 7));
+    nextDays = totalDays % 7;
+  } else {
+    nextWeeks = Math.min(41, currentWeeks);
+    nextDays = currentDays;
+  }
+
+  // 6. Symphysis-Fundal Height (SFH)
+  const sfhVal = Math.max(16, Math.min(40, nextWeeks + (riskPreference === 'moderate' ? 1 : 0)));
+  const sfhCm = `${sfhVal}`;
+
+  // 7. Progressive Maternal Weight
+  const baseWeight = lastVisit?.weightKg ?? patient.weightKg ?? 60.0;
+  let weightGain = 1.2;
+  if (riskPreference === 'high') {
+    weightGain = 2.6; // Fluid retention / pre-eclampsia weight spike
+  } else if (riskPreference === 'moderate') {
+    weightGain = 1.8;
+  } else {
+    weightGain = +(Math.max(0.8, (actualDaysAdvanced / 7) * 0.4)).toFixed(1);
+  }
+  const weightKg = +(baseWeight + weightGain).toFixed(1);
+
+  // 8. Engagement & Presentation
+  const presentation = 'Cephalic (Vertex)';
+  const engagement = nextWeeks > 36 ? 'Engaged' : 'Not engaged';
+
+  // 9. Risk-specific vitals and remarks
+  if (riskPreference === 'high') {
+    return {
+      date: candidateDateStr,
+      gestationalWeeks: nextWeeks,
+      gestationalDays: nextDays,
+      weightKg: weightKg.toString(),
+      bpSystolic: '150',
+      bpDiastolic: '98',
+      sfhCm,
+      presentation,
+      engagement: 'Not engaged',
+      fhr: '156',
+      fm: 'Reduced (<10/12h)',
+      urineAlb: '2+',
+      urineSug: 'Nil',
+      edema: 'Generalized (++)',
+      remarks: 'CRITICAL HIGH-RISK ALERT: Severe pregnancy-induced hypertension (150/98 mmHg), 2+ proteinuria, generalized edema, and reduced fetal movement. Immediate MOH Doctor notification and tertiary referral.',
+      ifaIssued: true,
+      calciumIssued: true,
+      vitCIssued: true,
+      foodSupplement: true,
+    };
+  }
+
+  if (riskPreference === 'moderate') {
+    return {
+      date: candidateDateStr,
+      gestationalWeeks: nextWeeks,
+      gestationalDays: nextDays,
+      weightKg: weightKg.toString(),
+      bpSystolic: '134',
+      bpDiastolic: '86',
+      sfhCm,
+      presentation,
+      engagement: 'Not engaged',
+      fhr: '146',
+      fm: 'Active (>10/12h)',
+      urineAlb: 'Trace',
+      urineSug: 'Nil',
+      edema: 'Pedal (+)',
+      remarks: 'Moderate risk checkup: Borderline elevated BP (134/86 mmHg), trace albuminuria, and mild ankle swelling noted. Advised rest, fluid intake, and review in 1 week.',
+      ifaIssued: true,
+      calciumIssued: true,
+      vitCIssued: true,
+      foodSupplement: true,
+    };
+  }
+
+  // Low Risk
+  return {
+    date: candidateDateStr,
+    gestationalWeeks: nextWeeks,
+    gestationalDays: nextDays,
+    weightKg: weightKg.toString(),
+    bpSystolic: '116',
+    bpDiastolic: '76',
+    sfhCm,
+    presentation,
+    engagement,
+    fhr: '140',
+    fm: 'Active (>10/12h)',
+    urineAlb: 'Nil',
+    urineSug: 'Nil',
+    edema: 'Nil',
+    remarks: 'Routine normal visit: Blood pressure optimal (116/76 mmHg), fetal growth consistent with dates, active fetal movement. Routine supplements issued.',
+    ifaIssued: true,
+    calciumIssued: true,
+    vitCIssued: true,
+    foodSupplement: false,
   };
 }

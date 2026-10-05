@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { evaluateVisitRisk, getPatientEffectiveRisk } from '../utils/aiRiskCalculator';
+import { evaluateVisitRisk, getPatientEffectiveRisk, calculateNextVisitProgression } from '../utils/aiRiskCalculator';
 import { mergeVisits, offlineStorage } from '../services/offlineStorage';
 import type { Patient, ANCVisit } from '../types/triage';
 
@@ -317,6 +317,193 @@ describe('AI Stratified Risk Level & Offline Multi-Visit Retention', () => {
       expect(merged[0].visitNo).toBe(1);
       expect(merged[4].visitNo).toBe(5);
       expect(merged[4].bp).toBe('150/98');
+    });
+  });
+
+  describe('3. Clinic Visit Auto-Progression & Duplicate Prevention', () => {
+    it('should auto-advance date, gestational weeks, SFH, and weight for low risk progression', () => {
+      const patient: Patient = {
+        ...basePatient,
+        gestationalWeeks: 24,
+        gestationalDays: 0,
+        weightKg: 55.0,
+        ancVisits: [
+          {
+            visitNo: 1,
+            date: '2026-08-01',
+            poa: '20w 0d',
+            gestationalWeeks: 20,
+            gestationalDays: 0,
+            weightKg: 53.0,
+            bp: '116/76',
+            sfhCm: '20 cm',
+            presentation: 'Cephalic',
+            engagement: 'Not engaged',
+            fhr: '140 bpm',
+            fm: 'Active',
+            urineAlb: 'Nil',
+            urineSug: 'Nil',
+            edema: 'Nil',
+            examiner: 'PHM',
+            remarks: 'Booking visit',
+          },
+        ],
+      };
+
+      const prog = calculateNextVisitProgression(patient, 'low');
+      expect(prog.date).toBe('2026-08-29'); // +28 days from 2026-08-01
+      expect(prog.gestationalWeeks).toBe(24); // 20w + 4w
+      expect(prog.sfhCm).toBe('24');
+      expect(parseFloat(prog.weightKg)).toBeGreaterThan(53.0);
+      expect(prog.bpSystolic).toBe('116');
+      expect(prog.bpDiastolic).toBe('76');
+      expect(prog.urineAlb).toBe('Nil');
+    });
+
+    it('should advance with 14-day intervals and pre-eclampsia vitals for high risk progression', () => {
+      const patient: Patient = {
+        ...basePatient,
+        gestationalWeeks: 30,
+        gestationalDays: 0,
+        ancVisits: [
+          {
+            visitNo: 1,
+            date: '2026-08-01',
+            poa: '28w 0d',
+            gestationalWeeks: 28,
+            gestationalDays: 0,
+            weightKg: 60.0,
+            bp: '120/80',
+            sfhCm: '28 cm',
+            presentation: 'Cephalic',
+            engagement: 'Not engaged',
+            fhr: '140 bpm',
+            fm: 'Active',
+            urineAlb: 'Nil',
+            urineSug: 'Nil',
+            edema: 'Nil',
+            examiner: 'PHM',
+            remarks: 'Normal visit',
+          },
+        ],
+      };
+
+      const prog = calculateNextVisitProgression(patient, 'high');
+      expect(prog.date).toBe('2026-08-15'); // +14 days for high-risk monitoring
+      expect(prog.gestationalWeeks).toBe(30); // 28w + 2w
+      expect(prog.bpSystolic).toBe('150');
+      expect(prog.bpDiastolic).toBe('98');
+      expect(prog.urineAlb).toBe('2+');
+      expect(prog.edema).toContain('Generalized');
+      expect(prog.fm).toContain('Reduced');
+    });
+
+    it('should automatically skip existing dates to guarantee no duplicate visit dates', () => {
+      const patient: Patient = {
+        ...basePatient,
+        gestationalWeeks: 28,
+        ancVisits: [
+          {
+            visitNo: 1,
+            date: '2026-08-01',
+            poa: '24w 0d',
+            gestationalWeeks: 24,
+            gestationalDays: 0,
+            weightKg: 55.0,
+            bp: '116/76',
+            sfhCm: '24 cm',
+            presentation: 'Cephalic',
+            engagement: 'Not engaged',
+            fhr: '140 bpm',
+            fm: 'Active',
+            urineAlb: 'Nil',
+            urineSug: 'Nil',
+            edema: 'Nil',
+            examiner: 'PHM',
+            remarks: 'Visit 1',
+          },
+          {
+            visitNo: 2,
+            date: '2026-08-29', // Intended next visit date (+28 days) already taken!
+            poa: '28w 0d',
+            gestationalWeeks: 28,
+            gestationalDays: 0,
+            weightKg: 56.5,
+            bp: '120/80',
+            sfhCm: '28 cm',
+            presentation: 'Cephalic',
+            engagement: 'Not engaged',
+            fhr: '140 bpm',
+            fm: 'Active',
+            urineAlb: 'Nil',
+            urineSug: 'Nil',
+            edema: 'Nil',
+            examiner: 'PHM',
+            remarks: 'Visit 2',
+          },
+        ],
+      };
+
+      const prog = calculateNextVisitProgression(patient, 'low');
+      // Should not be 2026-08-29 since it's already recorded
+      expect(prog.date).not.toBe('2026-08-29');
+      expect(prog.date).not.toBe('2026-08-01');
+      // Advances by 21 days from visit 2 (2026-08-29 + 21 days = 2026-09-19)
+      expect(prog.date).toBe('2026-09-19');
+      expect(prog.gestationalWeeks).toBe(31);
+    });
+
+    it('should sequentially generate 3 unique progressive visits without date conflict', () => {
+      let patient: Patient = {
+        ...basePatient,
+        recordDate: '2026-06-01',
+        gestationalWeeks: 20,
+        weightKg: 52.0,
+        ancVisits: [],
+      };
+
+      const visitDates: string[] = [];
+
+      for (let i = 1; i <= 3; i++) {
+        const prog = calculateNextVisitProgression(patient, 'low');
+        expect(visitDates).not.toContain(prog.date);
+        visitDates.push(prog.date);
+
+        const newVisit: ANCVisit = {
+          visitNo: i,
+          date: prog.date,
+          poa: `${prog.gestationalWeeks}w ${prog.gestationalDays}d`,
+          gestationalWeeks: prog.gestationalWeeks,
+          gestationalDays: prog.gestationalDays,
+          weightKg: parseFloat(prog.weightKg),
+          bp: `${prog.bpSystolic}/${prog.bpDiastolic}`,
+          sfhCm: `${prog.sfhCm} cm`,
+          presentation: prog.presentation,
+          engagement: prog.engagement,
+          fhr: `${prog.fhr} bpm`,
+          fm: prog.fm,
+          urineAlb: prog.urineAlb,
+          urineSug: prog.urineSug,
+          edema: prog.edema,
+          examiner: 'PHM Lead',
+          remarks: prog.remarks,
+        };
+
+        patient = {
+          ...patient,
+          gestationalWeeks: prog.gestationalWeeks,
+          weightKg: parseFloat(prog.weightKg),
+          ancVisits: [...(patient.ancVisits || []), newVisit],
+        };
+      }
+
+      expect(visitDates.length).toBe(3);
+      // All dates are strictly unique
+      const uniqueDates = new Set(visitDates);
+      expect(uniqueDates.size).toBe(3);
+      // Visits progress forward in time
+      expect(new Date(visitDates[0]).getTime()).toBeLessThan(new Date(visitDates[1]).getTime());
+      expect(new Date(visitDates[1]).getTime()).toBeLessThan(new Date(visitDates[2]).getTime());
     });
   });
 });

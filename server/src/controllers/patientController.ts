@@ -563,6 +563,16 @@ export const addPatientVisit = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: `Patient with ID ${id} not found` });
     }
 
+    // Check for duplicate visit on the same date
+    const visitDate = (visitInput.date ? String(visitInput.date).split('T')[0] : '') || new Date().toISOString().split('T')[0];
+    if (patient.ancVisits?.some(v => v.date && String(v.date).split('T')[0] === visitDate)) {
+      return res.status(409).json({
+        success: false,
+        code: 'DUPLICATE_VISIT',
+        message: `An antenatal visit is already recorded for patient ${id} on date ${visitDate}. Duplicate visits on the same date are not allowed.`,
+      });
+    }
+
     // 1. Save visit to local encrypted db and update patient vitals
     const result = localEncryptedDb.addClinicVisit(id, visitInput);
     if (!result) {

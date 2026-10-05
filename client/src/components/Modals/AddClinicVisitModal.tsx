@@ -3,6 +3,7 @@ import type { Patient, ANCVisitInput } from '../../types/triage';
 import { useAuth } from '../../context/AuthContext';
 import { formatDbDate } from '../../utils/dateUtils';
 import { validateClinicalVitals } from '../../utils/clinicalValidation';
+import { calculateNextVisitProgression } from '../../utils/aiRiskCalculator';
 import { 
   X, 
   Calendar, 
@@ -65,20 +66,68 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Synchronize initial values when selected patient changes
+  // Apply calculated clinical progression based on risk tier
+  const applyProgression = (riskTier: 'low' | 'moderate' | 'high') => {
+    if (!patient) return;
+    const prog = calculateNextVisitProgression(patient, riskTier);
+    setDate(prog.date);
+    setGestationalWeeks(prog.gestationalWeeks);
+    setGestationalDays(prog.gestationalDays);
+    setWeightKg(prog.weightKg);
+    setBpSystolic(prog.bpSystolic);
+    setBpDiastolic(prog.bpDiastolic);
+    setSfhCm(prog.sfhCm);
+    setPresentation(prog.presentation);
+    setEngagement(prog.engagement);
+    setFhr(prog.fhr);
+    setFm(prog.fm);
+    setUrineAlb(prog.urineAlb);
+    setUrineSug(prog.urineSug);
+    setEdema(prog.edema);
+    setRemarks(prog.remarks);
+    setIfaIssued(prog.ifaIssued);
+    setCalciumIssued(prog.calciumIssued);
+    setVitCIssued(prog.vitCIssued);
+    setFoodSupplement(prog.foodSupplement);
+    setErrorMsg(null);
+  };
+
+  // Synchronize initial values when selected patient changes (auto-advancing date & gestational age)
   useEffect(() => {
     if (patient) {
-      setDate(new Date().toISOString().split('T')[0]);
-      setGestationalWeeks(patient.gestationalWeeks || 32);
-      setGestationalDays(patient.gestationalDays || 0);
-      setWeightKg(patient.weightKg ? patient.weightKg.toString() : '64.0');
-      setBpSystolic(patient.bpSystolic ? patient.bpSystolic.toString() : '120');
-      setBpDiastolic(patient.bpDiastolic ? patient.bpDiastolic.toString() : '80');
-      setSfhCm(patient.fundalHeight ? patient.fundalHeight.replace(/\D/g, '') || `${patient.gestationalWeeks}` : `${patient.gestationalWeeks || 32}`);
+      const initialTier: 'low' | 'moderate' | 'high' =
+        patient.riskTier === 'high' ? 'high' : patient.riskTier === 'moderate' ? 'moderate' : 'low';
+      const prog = calculateNextVisitProgression(patient, initialTier);
+      setDate(prog.date);
+      setGestationalWeeks(prog.gestationalWeeks);
+      setGestationalDays(prog.gestationalDays);
+      setWeightKg(prog.weightKg);
+      setBpSystolic(prog.bpSystolic);
+      setBpDiastolic(prog.bpDiastolic);
+      setSfhCm(prog.sfhCm);
+      setPresentation(prog.presentation);
+      setEngagement(prog.engagement);
+      setFhr(prog.fhr);
+      setFm(prog.fm);
+      setUrineAlb(prog.urineAlb);
+      setUrineSug(prog.urineSug);
+      setEdema(prog.edema);
+      setRemarks(prog.remarks);
+      setIfaIssued(prog.ifaIssued);
+      setCalciumIssued(prog.calciumIssued);
+      setVitCIssued(prog.vitCIssued);
+      setFoodSupplement(prog.foodSupplement);
       setExaminer(currentUser ? `${currentUser.name} (${currentUser.role})` : (patient.assessedBy || 'Sister Priya Sharma (PHM Lead)'));
-      setRemarks(patient.riskTier === 'high' ? 'High risk review visit. Advised on danger symptoms and rest.' : 'Routine antenatal progression. Advised on balanced nutrition.');
+      setErrorMsg(null);
     }
   }, [patient, currentUser]);
+
+  // Duplicate Visit Date Conflict Detection
+  const normalizedSelectedDate = formatDbDate(date);
+  const conflictingVisit = patient?.ancVisits?.find(
+    (v) => v.date && formatDbDate(v.date) === normalizedSelectedDate
+  );
+  const isDuplicateDate = Boolean(conflictingVisit);
 
   if (!isOpen || !patient) return null;
 
@@ -93,72 +142,26 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
   const prevWeightNum = prevVisit ? prevVisit.weightKg : patient.weightKg || currentWeightNum;
   const weightDelta = +(currentWeightNum - prevWeightNum).toFixed(1);
 
-  // 1. Auto-fill Low Risk ANC Visit
-  const handleFillLowRiskVisit = () => {
-    setBpSystolic('116');
-    setBpDiastolic('76');
-    setFhr('140');
-    const baseW = patient?.weightKg || 60;
-    setWeightKg((baseW + 1.2).toFixed(1));
-    setSfhCm(`${gestationalWeeks || patient?.gestationalWeeks || 32}`);
-    setPresentation('Cephalic (Vertex)');
-    setEngagement(gestationalWeeks > 36 ? 'Engaged' : 'Not engaged');
-    setFm('Active (>10/12h)');
-    setUrineAlb('Nil');
-    setUrineSug('Nil');
-    setEdema('Nil');
-    setIfaIssued(true);
-    setCalciumIssued(true);
-    setVitCIssued(true);
-    setFoodSupplement(false);
-    setRemarks('Routine normal visit: Blood pressure optimal (116/76 mmHg), fetal growth consistent with dates, active fetal movement. Routine supplements issued.');
-  };
+  // 1. Auto-fill Low Risk ANC Visit (Advances date, gestation, SFH, and weight)
+  const handleFillLowRiskVisit = () => applyProgression('low');
 
-  // 2. Auto-fill Mid / Moderate Risk ANC Visit
-  const handleFillMidRiskVisit = () => {
-    setBpSystolic('134');
-    setBpDiastolic('86');
-    setFhr('146');
-    const baseW = patient?.weightKg || 60;
-    setWeightKg((baseW + 2.4).toFixed(1));
-    setSfhCm(`${(gestationalWeeks || patient?.gestationalWeeks || 32) + 1}`);
-    setPresentation('Cephalic (Vertex)');
-    setEngagement('Not engaged');
-    setFm('Active (>10/12h)');
-    setUrineAlb('Trace');
-    setUrineSug('Nil');
-    setEdema('Pedal (+)');
-    setIfaIssued(true);
-    setCalciumIssued(true);
-    setVitCIssued(true);
-    setFoodSupplement(true);
-    setRemarks('Moderate risk checkup: Borderline elevated BP (134/86 mmHg), trace albuminuria, and mild ankle swelling noted. Advised rest, fluid intake, and review in 1 week.');
-  };
+  // 2. Auto-fill Mid / Moderate Risk ANC Visit (Advances date, gestation, SFH, and weight)
+  const handleFillMidRiskVisit = () => applyProgression('moderate');
 
-  // 3. Auto-fill High Risk ANC Visit
-  const handleFillHighRiskVisit = () => {
-    setBpSystolic('150');
-    setBpDiastolic('98');
-    setFhr('156');
-    const baseW = patient?.weightKg || 60;
-    setWeightKg((baseW + 3.8).toFixed(1));
-    setSfhCm(`${gestationalWeeks || patient?.gestationalWeeks || 32}`);
-    setPresentation('Cephalic (Vertex)');
-    setEngagement('Not engaged');
-    setFm('Reduced (<10/12h)');
-    setUrineAlb('2+');
-    setUrineSug('Nil');
-    setEdema('Generalized (++)');
-    setIfaIssued(true);
-    setCalciumIssued(true);
-    setVitCIssued(true);
-    setFoodSupplement(true);
-    setRemarks('CRITICAL HIGH-RISK ALERT: Severe pregnancy-induced hypertension (150/98 mmHg), 2+ proteinuria, generalized edema, and reduced fetal movement. Immediate MOH Doctor notification and tertiary referral.');
-  };
+  // 3. Auto-fill High Risk ANC Visit (Advances date, gestation, SFH, and weight)
+  const handleFillHighRiskVisit = () => applyProgression('high');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    // Guard against duplicate visit dates
+    if (isDuplicateDate) {
+      setErrorMsg(
+        `Duplicate Visit Conflict: Visit #${conflictingVisit?.visitNo} is already recorded on ${date}. Multiple clinic visits on the exact same date are not permitted.`
+      );
+      return;
+    }
 
     const weight = parseFloat(weightKg);
     const systolic = parseInt(bpSystolic, 10);
@@ -326,13 +329,22 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div>
-                <label className="block font-bold text-[#0f172a] mb-1">Visit Date</label>
+                <label className="block font-bold text-[#0f172a] mb-1 flex items-center justify-between">
+                  <span>Visit Date</span>
+                  {isDuplicateDate && (
+                    <span className="text-[#dc2626] font-bold text-[10px]">⚠️ Already Recorded</span>
+                  )}
+                </label>
                 <input
                   type="date"
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#cbd5e1] rounded-lg bg-white font-medium focus:ring-2 focus:ring-[#006194] focus:outline-none"
+                  className={`w-full px-3 py-2 border rounded-lg bg-white font-medium focus:outline-none ${
+                    isDuplicateDate
+                      ? 'border-[#dc2626] text-[#dc2626] bg-[#fef2f2] focus:ring-2 focus:ring-[#dc2626]'
+                      : 'border-[#cbd5e1] focus:ring-2 focus:ring-[#006194]'
+                  }`}
                 />
               </div>
 
@@ -367,6 +379,18 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {isDuplicateDate && (
+              <div className="bg-[#fef2f2] text-[#991b1b] border border-[#f87171] p-3 rounded-lg flex items-start gap-2.5 font-medium mt-2">
+                <AlertTriangle className="w-4 h-4 text-[#ef4444] shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold">Duplicate Visit Date Conflict: </span>
+                  A clinic visit is already recorded for {patient.name} on{' '}
+                  <span className="font-mono font-bold underline">{date}</span> (Visit #{conflictingVisit?.visitNo}).
+                  Multiple clinic visits on the exact same date are not allowed. Please select an unused visit date or use the auto-fill buttons above.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 2: Maternal Biometrics & Hemodynamics */}
@@ -751,8 +775,9 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
 
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#006194] hover:bg-[#004f7b] text-white px-5 py-2 rounded-lg font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+                disabled={isSubmitting || isDuplicateDate}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#006194] hover:bg-[#004f7b] text-white px-5 py-2 rounded-lg font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isDuplicateDate ? `Cannot save: Visit #${conflictingVisit?.visitNo} already exists on ${date}` : undefined}
               >
                 {isSubmitting ? (
                   <>

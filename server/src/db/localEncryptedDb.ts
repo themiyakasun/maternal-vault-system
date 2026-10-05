@@ -273,7 +273,10 @@ export const localEncryptedDb = {
     const existingVisits = current.ancVisits || [];
     const visitNo = existingVisits.length + 1;
 
-    const dateStr = visitInput.date || new Date().toISOString().split('T')[0];
+    const dateStr = (visitInput.date ? String(visitInput.date).split('T')[0] : '') || new Date().toISOString().split('T')[0];
+    if (existingVisits.some(v => v.date && String(v.date).split('T')[0] === dateStr)) {
+      return null;
+    }
     const poaStr = visitInput.poa || (visitInput.gestationalWeeks 
       ? `${visitInput.gestationalWeeks}w ${visitInput.gestationalDays ?? 0}d` 
       : `${current.gestationalWeeks}w ${current.gestationalDays}d`);
