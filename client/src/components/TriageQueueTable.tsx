@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Patient, FilterTab } from '../types/triage';
 import { AlertTriangle, QrCode } from 'lucide-react';
+import { getPatientEffectiveRisk } from '../utils/aiRiskCalculator';
 
 interface TriageQueueTableProps {
   patients: Patient[];
@@ -22,15 +23,16 @@ export const TriageQueueTable: React.FC<TriageQueueTableProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
-  const highCount = patients.filter((p) => p.riskTier === 'high').length;
-  const modCount = patients.filter((p) => p.riskTier === 'moderate').length;
-  const lowCount = patients.filter((p) => p.riskTier === 'low').length;
+  const highCount = patients.filter((p) => getPatientEffectiveRisk(p).riskTier === 'high').length;
+  const modCount = patients.filter((p) => getPatientEffectiveRisk(p).riskTier === 'moderate').length;
+  const lowCount = patients.filter((p) => getPatientEffectiveRisk(p).riskTier === 'low').length;
 
-  // Filter patients
+  // Filter patients based on latest visit AI prediction
   const filteredPatients = patients.filter((p) => {
-    if (activeFilter === 'high') return p.riskTier === 'high';
-    if (activeFilter === 'moderate') return p.riskTier === 'moderate';
-    if (activeFilter === 'low') return p.riskTier === 'low';
+    const eff = getPatientEffectiveRisk(p);
+    if (activeFilter === 'high') return eff.riskTier === 'high';
+    if (activeFilter === 'moderate') return eff.riskTier === 'moderate';
+    if (activeFilter === 'low') return eff.riskTier === 'low';
     return true;
   });
 
@@ -61,32 +63,44 @@ export const TriageQueueTable: React.FC<TriageQueueTableProps> = ({
   };
 
   const renderRiskBadge = (patient: Patient) => {
-    if (patient.riskTier === 'high') {
+    const effRisk = getPatientEffectiveRisk(patient);
+
+    if (effRisk.riskTier === 'high') {
       return (
         <div className="inline-block bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] px-2.5 py-1 rounded text-[11px] font-bold tracking-tight">
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444]" />
-            <span>{patient.riskTitle}</span>
+            <span>{effRisk.riskTitle}</span>
+            {effRisk.sourceVisitNo && (
+              <span className="bg-[#ef4444] text-white text-[8.5px] px-1 py-0.2 rounded font-mono ml-0.5">
+                V#{effRisk.sourceVisitNo}
+              </span>
+            )}
           </div>
-          {patient.riskSubtitle && (
+          {effRisk.riskSubtitle && (
             <div className="text-[10px] font-semibold text-[#b91c1c] leading-none mt-0.5">
-              {patient.riskSubtitle}
+              {effRisk.riskSubtitle}
             </div>
           )}
         </div>
       );
     }
 
-    if (patient.riskTier === 'moderate') {
+    if (effRisk.riskTier === 'moderate') {
       return (
         <div className="inline-block bg-[#e0f2fe] text-[#0369a1] border border-[#93c5fd] px-2.5 py-1 rounded text-[11px] font-bold tracking-tight">
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-[#0284c7]" />
-            <span>{patient.riskTitle}</span>
+            <span>{effRisk.riskTitle}</span>
+            {effRisk.sourceVisitNo && (
+              <span className="bg-[#0284c7] text-white text-[8.5px] px-1 py-0.2 rounded font-mono ml-0.5">
+                V#{effRisk.sourceVisitNo}
+              </span>
+            )}
           </div>
-          {patient.riskSubtitle && (
+          {effRisk.riskSubtitle && (
             <div className="text-[10px] font-semibold text-[#0369a1] leading-none mt-0.5">
-              {patient.riskSubtitle}
+              {effRisk.riskSubtitle}
             </div>
           )}
         </div>
@@ -97,11 +111,16 @@ export const TriageQueueTable: React.FC<TriageQueueTableProps> = ({
       <div className="inline-block bg-[#d1fae5] text-[#065f46] border border-[#6ee7b7] px-2.5 py-1 rounded text-[11px] font-bold tracking-tight">
         <div className="flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-          <span>{patient.riskTitle}</span>
+          <span>{effRisk.riskTitle}</span>
+          {effRisk.sourceVisitNo && (
+            <span className="bg-[#10b981] text-white text-[8.5px] px-1 py-0.2 rounded font-mono ml-0.5">
+              V#{effRisk.sourceVisitNo}
+            </span>
+          )}
         </div>
-        {patient.riskSubtitle && (
+        {effRisk.riskSubtitle && (
           <div className="text-[10px] font-semibold text-[#047857] leading-none mt-0.5">
-            {patient.riskSubtitle}
+            {effRisk.riskSubtitle}
           </div>
         )}
       </div>
@@ -198,7 +217,7 @@ export const TriageQueueTable: React.FC<TriageQueueTableProps> = ({
                   {/* Left Severity Indicator Bar */}
                   <div
                     className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${getLeftBarColor(
-                      patient.riskTier
+                      getPatientEffectiveRisk(patient).riskTier
                     )}`}
                   />
 
@@ -303,7 +322,7 @@ export const TriageQueueTable: React.FC<TriageQueueTableProps> = ({
                     {/* Left Severity Indicator Bar */}
                     <div
                       className={`absolute left-0 top-0 bottom-0 w-1.5 ${getLeftBarColor(
-                        patient.riskTier
+                        getPatientEffectiveRisk(patient).riskTier
                       )}`}
                     />
 

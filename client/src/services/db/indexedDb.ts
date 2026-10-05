@@ -399,11 +399,15 @@ export const idbMutationStore = {
         request.onsuccess = () => {
           const existing = (request.result as QueuedOfflineMutation[]) || [];
           const normPatientId = mutation.patientId.replace(/^#/, '');
-          // Remove obsolete duplicate mutation of same type for this patient
+          // Remove obsolete duplicate mutations, but NEVER deduplicate ADD_VISIT (each visit is unique)
           for (const item of existing) {
             const itemPatientId = item.patientId.replace(/^#/, '');
-            if (itemPatientId === normPatientId && item.type === mutation.type) {
-              store.delete(item.id);
+            if (itemPatientId === normPatientId) {
+              if (mutation.type === 'DELETE_PATIENT') {
+                store.delete(item.id);
+              } else if (mutation.type !== 'ADD_VISIT' && item.type !== 'ADD_VISIT' && item.type === mutation.type) {
+                store.delete(item.id);
+              }
             }
           }
           store.put(mutation);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Patient } from '../../types/triage';
 import { formatDisplayDate } from '../../utils/dateUtils';
+import { getPatientEffectiveRisk } from '../../utils/aiRiskCalculator';
 import { 
   X, 
   Printer, 
@@ -92,6 +93,8 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  const effRisk = getPatientEffectiveRisk(patient);
 
   // Derive default H 512 B fields if not explicitly populated
   const bloodGroup = patient.bloodGroup || (patient.id === '#8842' ? 'B +ve' : patient.id === '#7912' ? 'O +ve' : patient.id === '#9043' ? 'A +ve' : 'O +ve');
@@ -199,9 +202,9 @@ export const PatientEHRModal: React.FC<PatientEHRModalProps> = ({
                   {patient.id}
                 </span>
                 <span className={`text-[9.5px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                  patient.riskTier === 'high' ? 'bg-[#fee2e2] text-[#991b1b]' : patient.riskTier === 'moderate' ? 'bg-[#e0f2fe] text-[#004b73]' : 'bg-[#dcfce7] text-[#14532d]'
+                  effRisk.riskTier === 'high' ? 'bg-[#fee2e2] text-[#991b1b]' : effRisk.riskTier === 'moderate' ? 'bg-[#e0f2fe] text-[#004b73]' : 'bg-[#dcfce7] text-[#14532d]'
                 }`}>
-                  {patient.riskTier}
+                  {effRisk.riskTier} Risk
                 </span>
               </div>
               <p className="text-[11px] text-[#cce5ff] mt-0.5 flex items-center gap-1.5 flex-wrap truncate">

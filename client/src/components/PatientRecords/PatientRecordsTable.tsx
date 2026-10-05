@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Patient } from '../../types/triage';
 import { formatDisplayDate } from '../../utils/dateUtils';
+import { getPatientEffectiveRisk } from '../../utils/aiRiskCalculator';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -65,29 +66,41 @@ export const PatientRecordsTable: React.FC<PatientRecordsTableProps> = ({
   };
 
   const renderRiskBadge = (patient: Patient) => {
-    if (patient.riskTier === 'high') {
+    const effRisk = getPatientEffectiveRisk(patient);
+
+    if (effRisk.riskTier === 'high') {
       return (
         <div className="space-y-1">
           <div className="inline-flex items-center gap-1 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] px-2 py-0.5 rounded text-[10.5px] font-bold">
             <AlertTriangle className="w-3 h-3 text-[#ef4444]" />
             <span>HIGH RISK</span>
+            {effRisk.sourceVisitNo && (
+              <span className="bg-[#ef4444] text-white text-[9px] px-1 py-0.2 rounded font-mono ml-0.5">
+                Visit #{effRisk.sourceVisitNo}
+              </span>
+            )}
           </div>
           <div className="text-[10.5px] text-[#991b1b] font-medium leading-tight">
-            {patient.riskSubtitle || 'Preterm Risk 68% • Pre-eclampsia'}
+            {effRisk.riskSubtitle}
           </div>
         </div>
       );
     }
 
-    if (patient.riskTier === 'moderate') {
+    if (effRisk.riskTier === 'moderate') {
       return (
         <div className="space-y-1">
           <div className="inline-flex items-center gap-1 bg-[#e0f2fe] text-[#0369a1] border border-[#93c5fd] px-2 py-0.5 rounded text-[10.5px] font-bold">
             <span>!</span>
             <span>MODERATE RISK</span>
+            {effRisk.sourceVisitNo && (
+              <span className="bg-[#0284c7] text-white text-[9px] px-1 py-0.2 rounded font-mono ml-0.5">
+                Visit #{effRisk.sourceVisitNo}
+              </span>
+            )}
           </div>
           <div className="text-[10.5px] text-[#0369a1] font-medium leading-tight">
-            {patient.riskSubtitle || 'Gestational Anemia • IFA Issued'}
+            {effRisk.riskSubtitle}
           </div>
         </div>
       );
@@ -98,9 +111,14 @@ export const PatientRecordsTable: React.FC<PatientRecordsTableProps> = ({
         <div className="inline-flex items-center gap-1 bg-[#d1fae5] text-[#065f46] border border-[#6ee7b7] px-2 py-0.5 rounded text-[10.5px] font-bold">
           <CheckCircle2 className="w-3 h-3 text-[#10b981]" />
           <span>LOW RISK</span>
+          {effRisk.sourceVisitNo && (
+            <span className="bg-[#10b981] text-white text-[9px] px-1 py-0.2 rounded font-mono ml-0.5">
+              Visit #{effRisk.sourceVisitNo}
+            </span>
+          )}
         </div>
         <div className="text-[10.5px] text-[#047857] font-medium leading-tight">
-          {patient.riskSubtitle || 'Routine Antenatal'}
+          {effRisk.riskSubtitle}
         </div>
       </div>
     );

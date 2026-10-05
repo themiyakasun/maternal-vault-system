@@ -32,6 +32,7 @@ import { MidwifeLoginModal } from './components/Auth/MidwifeLoginModal';
 import { patientApi } from './services/patientApi';
 import { offlineStorage } from './services/offlineStorage';
 import { formatDbDate } from './utils/dateUtils';
+import { evaluateVisitRisk, getPatientEffectiveRisk, toMLRiskAssessment } from './utils/aiRiskCalculator';
 import type { Patient, FilterTab, ANCVisitInput, ANCVisit } from './types/triage';
 import { 
   Zap, 
@@ -314,8 +315,8 @@ function DashboardContent() {
   const handleSaveClinicVisit = async (patientId: string, visitData: ANCVisitInput) => {
     const cid = activeClinicId;
     try {
-      // 1. Queue offline visit mutation first
-      offlineStorage.enqueueMutation({
+      // 1. Queue offline visit mutation first (returns unique mutationId)
+      const mutationId = await offlineStorage.enqueueMutation({
         type: 'ADD_VISIT',
         clinicId: cid,
         patientId,
@@ -330,12 +331,7 @@ function DashboardContent() {
         if (res?.success && res?.data?.patient) {
           updatedFromBackend = res.data.patient;
           newVisitRecord = res.data.visit;
-          const action = offlineStorage.getOfflineQueue(cid).find(
-            (q) => q.patientId === patientId && q.type === 'ADD_VISIT'
-          );
-          if (action) {
-            offlineStorage.removeMutation(action.id, cid);
-          }
+          offlineStorage.removeMutation(mutationId, cid);
         }
       } catch (e) {
         console.warn('Backend API offline or unreachable, visit safely queued for background sync:', e);
@@ -376,7 +372,8 @@ function DashboardContent() {
             },
           };
 
-          const isAlert = visitData.bpSystolic >= 140 || visitData.bpDiastolic >= 90;
+          // Recalculate AI Stratified Risk Level based on this latest visit's prediction
+          const visitRisk = evaluateVisitRisk(visitData, p);
           const newWeeks = visitData.gestationalWeeks || p.gestationalWeeks;
           const newDays = visitData.gestationalDays ?? p.gestationalDays;
           const newTrimester = (newWeeks > 27 ? 3 : newWeeks > 13 ? 2 : 1) as 1 | 2 | 3;
@@ -389,7 +386,7 @@ function DashboardContent() {
             weightKg: visitData.weightKg,
             bpSystolic: visitData.bpSystolic,
             bpDiastolic: visitData.bpDiastolic,
-            isBpAlert: isAlert,
+            isBpAlert: visitRisk.isBpAlert,
             fundalHeight: visitData.sfhCm,
             fhr: visitData.fhr || p.fhr,
             notes: visitData.remarks || p.notes,
@@ -397,6 +394,12 @@ function DashboardContent() {
             assessedTime: 'Just now (Visit #' + visitNo + ')',
             syncStatus: 'updated-local',
             ancVisits: [...existingVisits, fallbackVisit],
+            riskTier: visitRisk.riskTier,
+            riskTitle: visitRisk.riskTitle,
+            riskSubtitle: `Visit #${visitNo}: ${visitRisk.riskSubtitle}`,
+            pretermProbability: visitRisk.pretermProbability,
+            featureWeights: visitRisk.featureWeights,
+            mlRiskAssessment: toMLRiskAssessment(visitRisk, p),
             updatedAt: new Date().toISOString(),
           };
 
@@ -411,6 +414,7 @@ function DashboardContent() {
       const targetPatient = patients.find(p => p.id === patientId);
       const patientName = targetPatient?.name || patientId;
       const targetVisitNo = (targetPatient?.ancVisits?.length || 0) + 1;
+      const targetVisitRisk = evaluateVisitRisk(visitData, targetPatient);
 
       setSelectedEHRPatient((prev) => {
         if (!prev || prev.id !== patientId) return prev;
@@ -422,6 +426,13 @@ function DashboardContent() {
           bpDiastolic: visitData.bpDiastolic,
           fundalHeight: visitData.sfhCm,
           fhr: visitData.fhr || prev.fhr,
+          riskTier: targetVisitRisk.riskTier,
+          riskTitle: targetVisitRisk.riskTitle,
+          riskSubtitle: `Visit #${targetVisitNo}: ${targetVisitRisk.riskSubtitle}`,
+          pretermProbability: targetVisitRisk.pretermProbability,
+          isBpAlert: targetVisitRisk.isBpAlert,
+          featureWeights: targetVisitRisk.featureWeights,
+          mlRiskAssessment: toMLRiskAssessment(targetVisitRisk, prev),
           ancVisits: [
             ...(prev.ancVisits || []),
             newVisitRecord || {
@@ -447,7 +458,9 @@ function DashboardContent() {
 
       setSelectedQRPatient((prev) => {
         if (!prev || prev.id !== patientId) return prev;
-        return updatedFromBackend || prev;
+        if (updatedFromBackend) return updatedFromBackend;
+        const currentTarget = patients.find(p => p.id === patientId);
+        return currentTarget ? { ...currentTarget, riskTier: targetVisitRisk.riskTier } : prev;
       });
 
       showToast(`Clinic visit #${targetVisitNo} saved & encrypted for ${patientName}.`);
@@ -610,8 +623,9 @@ function DashboardContent() {
       if (!matchName && !matchId && !matchAbha && !matchLoc && !matchVillage) return false;
     }
 
-    // Risk Filter
-    if (riskFilter !== 'all' && p.riskTier !== riskFilter) return false;
+    // Risk Filter - Aligned with latest visit AI prediction
+    const effRisk = getPatientEffectiveRisk(p);
+    if (riskFilter !== 'all' && effRisk.riskTier !== riskFilter) return false;
 
     // Trimester Filter
     if (trimesterFilter !== 'all' && p.trimester.toString() !== trimesterFilter) return false;
@@ -625,7 +639,7 @@ function DashboardContent() {
     return true;
   });
 
-  const criticalCount = patients.filter((p) => p.riskTier === 'high').length;
+  const criticalCount = patients.filter((p) => getPatientEffectiveRisk(p).riskTier === 'high').length;
 
   return (
     <div className="flex min-h-screen bg-[#faf8ff] text-[#131b2e] font-sans antialiased">
@@ -709,7 +723,7 @@ function DashboardContent() {
               firstTrim={patients.filter((p) => p.trimester === 1).length}
               secondTrim={patients.filter((p) => p.trimester === 2).length}
               thirdTrim={patients.filter((p) => p.trimester === 3).length}
-              highRiskCount={patients.filter((p) => p.riskTier === 'high').length}
+              highRiskCount={patients.filter((p) => getPatientEffectiveRisk(p).riskTier === 'high').length}
               syncedPercentage={patients.length > 0 ? `${((patients.filter((p) => p.syncStatus === 'synced-p2p').length / patients.length) * 100).toFixed(1)}%` : '100%'}
               syncedCount={patients.filter((p) => p.syncStatus === 'synced-p2p').length}
             />

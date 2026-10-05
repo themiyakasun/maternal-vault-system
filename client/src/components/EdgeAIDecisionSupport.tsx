@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Patient } from '../types/triage';
+import { getPatientEffectiveRisk, toMLRiskAssessment } from '../utils/aiRiskCalculator';
 import { 
   AlertCircle, 
   ShieldCheck, 
@@ -34,10 +35,11 @@ export const EdgeAIDecisionSupport: React.FC<EdgeAIDecisionSupportProps> = ({
     );
   }
 
-  const isHighRisk = patient.riskTier === 'high';
-  const isModerateRisk = patient.riskTier === 'moderate';
-  const probability = patient.pretermProbability;
-  const ml = patient.mlRiskAssessment;
+  const eff = getPatientEffectiveRisk(patient);
+  const isHighRisk = eff.riskTier === 'high';
+  const isModerateRisk = eff.riskTier === 'moderate';
+  const probability = eff.pretermProbability;
+  const ml = patient.mlRiskAssessment || toMLRiskAssessment(eff, patient);
 
   return (
     <div className="bg-[#ffffff] border border-[#e2e8f0] rounded-xl p-4 shadow-xs space-y-4">

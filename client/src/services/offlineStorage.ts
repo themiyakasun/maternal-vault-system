@@ -1,4 +1,5 @@
-import type { Patient } from '../types/triage';
+import type { Patient, ANCVisit } from '../types/triage';
+import { evaluateVisitRisk } from '../utils/aiRiskCalculator';
 import { patientApi } from './patientApi';
 import {
   idbPatientStore,
@@ -198,7 +199,7 @@ export const offlineStorage = {
     return this.getOfflineQueue(clinicId);
   },
 
-  async enqueueMutation(mutation: Omit<QueuedOfflineMutation, 'id' | 'createdAt' | 'retryCount'>): Promise<void> {
+  async enqueueMutation(mutation: Omit<QueuedOfflineMutation, 'id' | 'createdAt' | 'retryCount'>): Promise<string> {
     const newAction: QueuedOfflineMutation = {
       ...mutation,
       id: `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -210,9 +211,13 @@ export const offlineStorage = {
 
     // 1. Update in-memory queue
     const currentQueue = memoryMutationQueue.get(mutation.clinicId) || [];
-    const filtered = currentQueue.filter(
-      (item) => !(item.patientId.replace(/^#/, '') === normPatientId && item.type === mutation.type)
-    );
+    const filtered = currentQueue.filter((item) => {
+      const itemPatientId = item.patientId.replace(/^#/, '');
+      if (itemPatientId !== normPatientId) return true;
+      if (mutation.type === 'DELETE_PATIENT') return false; // Patient deleted, purge pending
+      if (mutation.type === 'ADD_VISIT' || item.type === 'ADD_VISIT') return true; // Keep all visits!
+      return item.type !== mutation.type;
+    });
     filtered.push(newAction);
     memoryMutationQueue.set(mutation.clinicId, filtered);
 
@@ -228,7 +233,8 @@ export const offlineStorage = {
     // 3. Request Autonomous Background Sync Worker (Section 4.2.3 & TC-08)
     requestBackgroundSync('sync-maternal-records').catch(() => {});
 
-    console.log(`📥 [IndexedDB] Queued offline mutation [${mutation.type}] for patient ${mutation.patientId}`);
+    console.log(`📥 [IndexedDB] Queued offline mutation [${mutation.type}] for patient ${mutation.patientId} (id: ${newAction.id})`);
+    return newAction.id;
   },
 
   removeMutation(actionId: string, clinicId: string): void {
@@ -311,7 +317,8 @@ export const offlineStorage = {
           synced++;
           console.log(`✅ [IndexedDB Sync] Successfully synced offline mutation [${item.type}] for ${item.patientId}`);
           if (onSynced) {
-            onSynced(serverResult?.data, item.type);
+            const patientObj = (serverResult?.data && (serverResult.data.patient || serverResult.data)) || null;
+            onSynced(patientObj, item.type);
           }
         } else if (serverResult?.code === 'DUPLICATE_NIC') {
           // If rejected as a duplicate, remove from queue to prevent infinite retry loops
@@ -366,10 +373,60 @@ export const offlineStorage = {
         .filter((nic): nic is string => Boolean(nic))
     );
 
-    // 2. Retain only genuinely un-synced local patients:
-    // - Must not have a pending deletion
-    // - Must not already exist on the server by ID or NIC
-    // - Must NOT be a record previously marked 'synced-p2p' that the server no longer has (meaning deleted)
+    // 2. Reconcile server patients with local visits to ensure no offline visits are lost
+    const reconciledServer = filteredServer.map((sp) => {
+      const normId = normalize(sp.id);
+      const cleanNic = sp.nicNo ? sp.nicNo.trim().toUpperCase() : null;
+      const localMatch = (currentLocalList || []).find((lp) => {
+        if (normalize(lp.id) === normId) return true;
+        if (cleanNic && lp.nicNo && lp.nicNo.trim().toUpperCase() === cleanNic) return true;
+        return false;
+      });
+
+      const mergedVisits = localMatch
+        ? mergeVisits(sp.ancVisits || [], localMatch.ancVisits || [])
+        : sp.ancVisits || [];
+
+      let effectivePatient: Patient = {
+        ...sp,
+        ...(localMatch ? { notes: localMatch.notes || sp.notes } : {}),
+        ancVisits: mergedVisits,
+      };
+
+      // Set AI Stratified Risk Level directly to the latest visit's prediction
+      if (mergedVisits.length > 0) {
+        const latestVisit = mergedVisits[mergedVisits.length - 1];
+        const visitRisk = evaluateVisitRisk(latestVisit, effectivePatient);
+        let sbp = (latestVisit as any).bpSystolic as number | undefined;
+        let dbp = (latestVisit as any).bpDiastolic as number | undefined;
+        if ((sbp == null || dbp == null) && latestVisit.bp) {
+          const parts = latestVisit.bp.split('/').map((s) => parseInt(s.trim(), 10));
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            sbp = parts[0];
+            dbp = parts[1];
+          }
+        }
+
+        effectivePatient = {
+          ...effectivePatient,
+          weightKg: latestVisit.weightKg ?? effectivePatient.weightKg,
+          bpSystolic: sbp ?? effectivePatient.bpSystolic,
+          bpDiastolic: dbp ?? effectivePatient.bpDiastolic,
+          fundalHeight: latestVisit.sfhCm || effectivePatient.fundalHeight,
+          fhr: latestVisit.fhr || effectivePatient.fhr,
+          riskTier: visitRisk.riskTier,
+          riskTitle: visitRisk.riskTitle,
+          riskSubtitle: `Visit #${latestVisit.visitNo}: ${visitRisk.riskSubtitle}`,
+          pretermProbability: visitRisk.pretermProbability,
+          isBpAlert: visitRisk.isBpAlert,
+          featureWeights: visitRisk.featureWeights,
+        };
+      }
+
+      return effectivePatient;
+    });
+
+    // 3. Retain genuinely un-synced local patients
     const localForClinic = (currentLocalList || []).filter(
       (p) => !p.clinicId || !p.tenantId || p.clinicId === clinicId || p.tenantId === clinicId
     );
@@ -380,17 +437,31 @@ export const offlineStorage = {
       if (serverIdSet.has(normId)) return false;
       if (p.nicNo && serverNicSet.has(p.nicNo.trim().toUpperCase())) return false;
 
-      // If this record was already synchronized to the server, and the server no longer returns it,
-      // it was deleted from the central database. Do NOT resurrect it!
+      // If already synced and server no longer returns it, was deleted centrally
       if (p.syncStatus === 'synced-p2p') return false;
 
       return true;
+    }).map((lp) => {
+      if (lp.ancVisits && lp.ancVisits.length > 0) {
+        const latestVisit = lp.ancVisits[lp.ancVisits.length - 1];
+        const visitRisk = evaluateVisitRisk(latestVisit, lp);
+        return {
+          ...lp,
+          riskTier: visitRisk.riskTier,
+          riskTitle: visitRisk.riskTitle,
+          riskSubtitle: `Visit #${latestVisit.visitNo}: ${visitRisk.riskSubtitle}`,
+          pretermProbability: visitRisk.pretermProbability,
+          isBpAlert: visitRisk.isBpAlert,
+          featureWeights: visitRisk.featureWeights,
+        };
+      }
+      return lp;
     });
 
-    // 3. Combine: unpushed local entries stay at the top
-    const combined = [...unpushedLocalPatients, ...filteredServer];
+    // 4. Combine: unpushed local entries stay at the top
+    const combined = [...unpushedLocalPatients, ...reconciledServer];
 
-    // 4. Strict deduplication by normalized ID and NIC
+    // 5. Strict deduplication by normalized ID and NIC
     const seenIds = new Set<string>();
     const seenNics = new Set<string>();
     const deduplicated: Patient[] = [];
@@ -408,9 +479,54 @@ export const offlineStorage = {
       deduplicated.push(patient);
     }
 
-    // 5. Persist clean deduplicated list to IndexedDB & memory cache
+    // 6. Persist clean deduplicated list to IndexedDB & memory cache
     this.saveCachedPatients(clinicId, deduplicated);
 
     return deduplicated;
   },
 };
+
+/**
+ * Merges server and local clinic visits without losing un-synced offline visits.
+ * Deduplicates identical encounters and sorts them chronologically.
+ */
+export function mergeVisits(serverVisits: ANCVisit[] = [], localVisits: ANCVisit[] = []): ANCVisit[] {
+  if (!serverVisits || serverVisits.length === 0) return localVisits || [];
+  if (!localVisits || localVisits.length === 0) return serverVisits || [];
+
+  const visitList: ANCVisit[] = [...serverVisits];
+
+  const isSameEncounter = (v1: ANCVisit, v2: ANCVisit): boolean => {
+    // 1. Same date and matching BP or weight
+    if (v1.date && v2.date && v1.date === v2.date) {
+      if (v1.bp && v2.bp && v1.bp === v2.bp) return true;
+      if (v1.weightKg && v2.weightKg && Math.abs(v1.weightKg - v2.weightKg) < 0.2) return true;
+    }
+    // 2. Matching visitNo and date
+    if (v1.visitNo && v2.visitNo && v1.visitNo === v2.visitNo) {
+      if (v1.date === v2.date) return true;
+    }
+    return false;
+  };
+
+  for (const lv of localVisits) {
+    const exists = visitList.some((sv) => isSameEncounter(sv, lv));
+    if (!exists) {
+      visitList.push(lv);
+    }
+  }
+
+  // Sort chronologically by date
+  visitList.sort((a, b) => {
+    const da = a.date ? new Date(a.date).getTime() : 0;
+    const db = b.date ? new Date(b.date).getTime() : 0;
+    if (da !== db) return da - db;
+    return (a.visitNo || 0) - (b.visitNo || 0);
+  });
+
+  return visitList.map((v, idx) => ({
+    ...v,
+    visitNo: idx + 1,
+  }));
+}
+
