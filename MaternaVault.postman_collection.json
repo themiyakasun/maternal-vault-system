@@ -1,0 +1,695 @@
+{
+  "info": {
+    "_postman_id": "maternal-vault-backend-api-v1",
+    "name": "MaternaVault Backend API Collection",
+    "description": "Comprehensive Postman Collection for MaternaVault Edge Clinical API & Central Cloud Backend. Includes full payload bodies, multi-tenant parameters, RBAC supervisory triggers, sync queues, and HL7 FHIR R4 interoperability.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://research.themiyakasun.live",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "clinic-ambagamuwa",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "samplePatientId",
+      "value": "#1024",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. System & Health",
+      "item": [
+        {
+          "name": "API Health & Telemetry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Inspects server status, active ML inference models (XGBoost, SMOTE-XGB, ADASYN-XGB), AES-256-GCM local database encryption telemetry, and PostgreSQL central connection state."
+          }
+        },
+        {
+          "name": "Mobile Emergency Health Pass Web Viewer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mobile/patient/{{samplePatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["mobile", "patient", "{{samplePatientId}}"]
+            },
+            "description": "Lightweight emergency maternal clinical summary view rendered directly in mobile browser when a paramedic or clinician scans the patient's QR pass."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Authentication & Staff Management",
+      "item": [
+        {
+          "name": "List All Clinics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/clinics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "clinics"]
+            },
+            "description": "Fetches all authorized clinic tenant stations (e.g., clinic-ambagamuwa, clinic-4b-rampur, clinic-02-kandy)."
+          }
+        },
+        {
+          "name": "List Staff for Clinic",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/clinics/{{tenantId}}/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "clinics", "{{tenantId}}", "staff"]
+            },
+            "description": "Returns authorized clinicians, PHM midwives, and MOH doctors scoped to the selected clinic."
+          }
+        },
+        {
+          "name": "Staff Login (High-Security PBKDF2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('authToken', json.token);",
+                  "        console.log('Saved authToken into collection variable:', json.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clinicId\": \"clinic-4b-rampur\",\n  \"staffId\": \"PHM-PRIYA-71\",\n  \"password\": \"Priya@Materna2026!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticates a clinician or midwife using PBKDF2-SHA512 password verification. Attaches an httpOnly session cookie and returns a signed 12-hour shift token that is automatically stored in `{{authToken}}`."
+          }
+        },
+        {
+          "name": "Doctor Login (Supervisory Review Tier)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.token) {",
+                  "        pm.collectionVariables.set('authToken', json.token);",
+                  "        console.log('Saved doctor authToken into collection variable:', json.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clinicId\": \"clinic-4b-rampur\",\n  \"staffId\": \"DOC-RAJIV-01\",\n  \"password\": \"DrRajiv@MOH2026!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticates an MOH Medical Officer (Doctor) to authorize divisional high-risk supervisory triage actions (UC-06)."
+          }
+        },
+        {
+          "name": "Get Current Session Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Validates the active session via httpOnly cookie or Authorization Bearer header, returning staff role and clinic jurisdiction."
+          }
+        },
+        {
+          "name": "Register New Staff Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sister Kanthi Jayawardena\",\n  \"title\": \"Public Health Midwife\",\n  \"role\": \"phm\",\n  \"clinicId\": \"{{tenantId}}\",\n  \"password\": \"Kanthi@Materna2026!\",\n  \"assignedBeats\": [\"Ambagamuwa Sector 1\", \"Ambagamuwa Sector 2\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "staff"]
+            },
+            "description": "Dynamically provisions a new midwife or clinician with randomized PBKDF2 salt generation."
+          }
+        },
+        {
+          "name": "Verify Offline Shift Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{authToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-offline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verify-offline"]
+            },
+            "description": "Validates cryptographic HMAC-SHA256 signature and expiration timestamp of an offline station session token."
+          }
+        },
+        {
+          "name": "Staff Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Clears httpOnly authentication cookie and terminates local station session."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Patient Records & Clinical Registry",
+      "item": [
+        {
+          "name": "List Patients (Filtered & Multi-Tenant)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients?tenantId={{tenantId}}&limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "risk",
+                  "value": "high",
+                  "disabled": true
+                },
+                {
+                  "key": "trimester",
+                  "value": "2",
+                  "disabled": true
+                },
+                {
+                  "key": "sync",
+                  "value": "synced-p2p",
+                  "disabled": true
+                },
+                {
+                  "key": "condition",
+                  "value": "Pre-eclampsia",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Lists maternal patient records filtered by clinic tenant, risk tier, trimester, sync status, or clinical condition search."
+          }
+        },
+        {
+          "name": "Get Maternal Registry Summary Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/stats?tenantId={{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "stats"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                }
+              ]
+            },
+            "description": "Calculates dashboard KPIs: total mothers registered, trimester breakdowns (1st, 2nd, 3rd), high-risk count, and sync rates."
+          }
+        },
+        {
+          "name": "Check Duplicate NIC Number",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/check-nic?nic=199864201234&tenantId={{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "check-nic"],
+              "query": [
+                {
+                  "key": "nic",
+                  "value": "199864201234"
+                },
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                }
+              ]
+            },
+            "description": "Pre-flight validation to prevent duplicate maternal registrations across both the local offline station and cloud PostgreSQL."
+          }
+        },
+        {
+          "name": "Get Single Patient by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}"]
+            },
+            "description": "Retrieves comprehensive longitudinal maternal electronic health record (EHR)."
+          }
+        },
+        {
+          "name": "Create Patient (Intake Registration + 3 ML Models)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kumari Sandamali Perera\",\n  \"age\": 26,\n  \"dob\": \"1998-05-14\",\n  \"nicNo\": \"199864201234\",\n  \"phone\": \"077 234 5678\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"clinicId\": \"{{tenantId}}\",\n  \"mohArea\": \"MOH Ambagamuwa\",\n  \"village\": \"Ambagamuwa Division\",\n  \"locality\": \"GN Division 14\",\n  \"phmRegisterNo\": \"PHM/2026/042\",\n  \"gestationalWeeks\": 28,\n  \"gestationalDays\": 3,\n  \"lmp\": \"2024-04-12\",\n  \"edd\": \"2025-01-17\",\n  \"poaAtBooking\": \"8w 2d\",\n  \"registrationDate\": \"2024-04-12\",\n  \"heightCm\": 158,\n  \"weightKg\": 64.5,\n  \"bmi\": 25.8,\n  \"bloodGroup\": \"B +ve\",\n  \"bpSystolic\": 138,\n  \"bpDiastolic\": 88,\n  \"gravida\": 2,\n  \"para\": 1,\n  \"livingChildren\": 1,\n  \"abortions\": 0,\n  \"prevLscs\": false,\n  \"prevPreterm\": false,\n  \"prevPph\": false,\n  \"intendedHospital\": \"Base Hospital Gampola\",\n  \"emergencyTransportReady\": true,\n  \"dangerSignsPresent\": [],\n  \"medicalHistory\": {\n    \"diabetes\": false,\n    \"chronicHtn\": false,\n    \"cardiac\": false,\n    \"asthma\": false,\n    \"thyroid\": false,\n    \"epilepsy\": false,\n    \"thalassaemia\": false,\n    \"allergies\": \"None known\",\n    \"surgeries\": \"None reported\"\n  },\n  \"labResults\": {\n    \"bloodGroup\": \"B +ve\",\n    \"vdrl\": \"Non-reactive\",\n    \"rubella\": \"Immune\",\n    \"hiv\": \"Non-reactive\",\n    \"hbsAg\": \"Negative\",\n    \"fbs\": \"82 mg/dL\",\n    \"hbBooking\": 11.6,\n    \"urineAlbumin\": \"Nil\",\n    \"urineSugar\": \"Nil\"\n  },\n  \"notes\": \"Intake registered via central API. Baseline blood tests normal.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patients",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients"]
+            },
+            "description": "Registers a new pregnant mother. Automatically triggers on-device 3-Model ML Risk Stratification (XGBoost Maternal Risk, SMOTE-XGB Nutritional Anemia, ADASYN-XGB Prenatal Depression), writes to Local Encrypted DB, and syncs to PostgreSQL."
+          }
+        },
+        {
+          "name": "Add Antenatal Clinic (ANC) Visit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visitDate\": \"2024-10-05\",\n  \"poaWeeks\": 32,\n  \"poaDays\": 1,\n  \"weightKg\": 66.8,\n  \"bpSystolic\": 134,\n  \"bpDiastolic\": 86,\n  \"fundalHeight\": 32,\n  \"fetalHeartRate\": 144,\n  \"fetalLie\": \"Longitudinal\",\n  \"fetalPresentation\": \"Cephalic\",\n  \"fetalMovement\": \"Active\",\n  \"urineAlbumin\": \"Nil\",\n  \"urineSugar\": \"Nil\",\n  \"hb\": 11.4,\n  \"edema\": \"Absent\",\n  \"clinicalNotes\": \"Good maternal progress. Fetal growth matches gestation.\",\n  \"supplements\": {\n    \"ifaIssued\": true,\n    \"calciumIssued\": true,\n    \"vitCIssued\": true,\n    \"foodSupplement\": false\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}/visits",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}", "visits"]
+            },
+            "description": "Logs an Antenatal Clinic (ANC) follow-up visit. Updates longitudinal trajectory, checks Table 4.4 physiological boundary limits, and re-evaluates 3-model risk."
+          }
+        },
+        {
+          "name": "Evaluate Risk (Doctor / Admin Supervisory Tier UC-06)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clinicalNotes\": \"Supervisory review conducted by MOH Medical Officer. Re-evaluated risk tier based on recent serial blood pressures.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}/evaluate-risk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}", "evaluate-risk"]
+            },
+            "description": "MOH Doctor Supervisory Authority action (UC-06). Re-runs 3-model ML risk stratification and assigns authoritative review sign-off. Requires doctor or admin role."
+          }
+        },
+        {
+          "name": "Update Patient Record",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"077 999 8888\",\n  \"bpSystolic\": 130,\n  \"bpDiastolic\": 82,\n  \"weightKg\": 67.2,\n  \"notes\": \"Phone updated and BP stabilized following dietary guidance.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}"]
+            },
+            "description": "Updates patient demographic or clinical indicators with automatic ML risk recalculation."
+          }
+        },
+        {
+          "name": "Get Patient Optical QR Code Pass",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}/qr",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}", "qr"]
+            },
+            "description": "Generates ECDSA P-256 signed optical QR payload data URL (Table 4.5 compact optical format with CRC-32 and SHA-256 integrity verification)."
+          }
+        },
+        {
+          "name": "Delete Patient Record",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-tenant-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/patients/{{samplePatientId}}?tenantId={{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "patients", "{{samplePatientId}}"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                }
+              ]
+            },
+            "description": "Deletes patient record from both Local Encrypted DB and central PostgreSQL database without resurrecting on refresh."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Database Sync & Offline Mutations",
+      "item": [
+        {
+          "name": "Get Central DB Sync Status & Telemetry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sync/status?tenantId={{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sync", "status"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                }
+              ]
+            },
+            "description": "Provides sync telemetry: central PostgreSQL connectivity, total records, unpushed count, last sync timestamp, and encryption checksum."
+          }
+        },
+        {
+          "name": "Pre-flight Connection & Status Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-clinic-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sync/check-connection?tenantId={{tenantId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sync", "check-connection"],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenantId}}"
+                }
+              ]
+            },
+            "description": "Runs connectivity probe against cloud PostgreSQL to verify uplink latency and determine if a sync cycle should be started."
+          }
+        },
+        {
+          "name": "Trigger Manual Central DB Sync",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-clinic-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sync/trigger",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sync", "trigger"]
+            },
+            "description": "Initiates immediate bidirectional synchronization cycle between the offline encrypted station and central cloud PostgreSQL."
+          }
+        },
+        {
+          "name": "Ingest Batched Offline Mutation Queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-idempotency-key",
+                "value": "idem-uuid-{{$randomUUID}}"
+              },
+              {
+                "key": "x-clinic-id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uuid\": \"queue-batch-{{$randomUUID}}\",\n  \"clinicId\": \"{{tenantId}}\",\n  \"timestamp\": \"2024-10-05T12:00:00.000Z\",\n  \"mutations\": [\n    {\n      \"id\": \"mut-1\",\n      \"type\": \"CREATE_PATIENT\",\n      \"patientId\": \"#1099\",\n      \"payload\": {\n        \"name\": \"Mala Priyadharshani\",\n        \"age\": 24,\n        \"bpSystolic\": 120,\n        \"bpDiastolic\": 80,\n        \"gestationalWeeks\": 16\n      },\n      \"timestamp\": \"2024-10-05T11:45:00.000Z\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sync/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sync", "queue"]
+            },
+            "description": "Ingests offline batched mutations protected by SHA-256 idempotency filtering (Section 4.6.3 Sequence Diagram Step 3)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. HL7 FHIR R4 Interoperability",
+      "item": [
+        {
+          "name": "Export FHIR R4 Patient Resource",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/fhir/R4/Patient/{{samplePatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["fhir", "R4", "Patient", "{{samplePatientId}}"]
+            },
+            "description": "Exports maternal clinical demographics conforming strictly to HL7 FHIR R4 StructureDefinition/Patient."
+          }
+        },
+        {
+          "name": "Export Longitudinal FHIR R4 Bundle",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/fhir+json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/fhir/R4/Bundle/{{samplePatientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["fhir", "R4", "Bundle", "{{samplePatientId}}"]
+            },
+            "description": "Exports longitudinal maternal clinical record as an HL7 FHIR R4 transaction bundle containing Patient, Observations (LOINC 85354-9 Blood Pressure, LOINC 29463-7 Weight, LOINC 718-7 Hemoglobin), and RiskAssessment resources."
+          }
+        },
+        {
+          "name": "Ingest External FHIR R4 Bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/fhir+json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceType\": \"Bundle\",\n  \"type\": \"transaction\",\n  \"entry\": [\n    {\n      \"resource\": {\n        \"resourceType\": \"Patient\",\n        \"id\": \"patient-1025\",\n        \"name\": [\n          {\n            \"use\": \"official\",\n            \"family\": \"Fernando\",\n            \"given\": [\"Dilani\"]\n          }\n        ],\n        \"gender\": \"female\",\n        \"birthDate\": \"1997-08-15\",\n        \"telecom\": [\n          {\n            \"system\": \"phone\",\n            \"value\": \"071 555 4321\"\n          }\n        ]\n      }\n    },\n    {\n      \"resource\": {\n        \"resourceType\": \"Observation\",\n        \"status\": \"final\",\n        \"code\": {\n          \"coding\": [\n            {\n              \"system\": \"http://loinc.org\",\n              \"code\": \"85354-9\",\n              \"display\": \"Blood pressure panel\"\n            }\n          ]\n        },\n        \"component\": [\n          {\n            \"code\": {\n              \"coding\": [\n                {\n                  \"system\": \"http://loinc.org\",\n                  \"code\": \"8480-6\",\n                  \"display\": \"Systolic blood pressure\"\n                }\n              ]\n            },\n            \"valueQuantity\": {\n              \"value\": 122,\n              \"unit\": \"mm[Hg]\",\n              \"system\": \"http://unitsofmeasure.org\"\n            }\n          },\n          {\n            \"code\": {\n              \"coding\": [\n                {\n                  \"system\": \"http://loinc.org\",\n                  \"code\": \"8462-4\",\n                  \"display\": \"Diastolic blood pressure\"\n                }\n              ]\n            },\n            \"valueQuantity\": {\n              \"value\": 80,\n              \"unit\": \"mm[Hg]\",\n              \"system\": \"http://unitsofmeasure.org\"\n            }\n          }\n        ]\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/fhir/R4/Bundle",
+              "host": ["{{baseUrl}}"],
+              "path": ["fhir", "R4", "Bundle"]
+            },
+            "description": "Ingests external HL7 FHIR R4 clinical bundle into MaternaVault, deserializing LOINC vitals and creating or updating patient records (Section 4.4.3 NFR-03 & Section 4.8.1)."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -53,7 +53,10 @@ export interface FHIRBundle {
  * Conforms strictly to HL7 FHIR Bundle 'urn:uuid:' specification for validator.fhir.org.
  */
 export function createDeterministicUuid(seed: string): string {
-  let h1 = 0xdeadbeef, h2 = 0x41c64e6d, h3 = 0x12345678, h4 = 0x87654321;
+  let h1 = 0xdeadbeef,
+    h2 = 0x41c64e6d,
+    h3 = 0x12345678,
+    h4 = 0x87654321;
   for (let i = 0; i < seed.length; i++) {
     const ch = seed.charCodeAt(i);
     h1 = Math.imul(h1 ^ ch, 2654435761);
@@ -102,10 +105,11 @@ export interface FHIRSerializationOptions {
 
 /**
  * Official HL7 FHIR Serializer
- * Strictly validates against https://validator.fhir.org/ with 0 Errors, 0 Fatal.
- * Supports both standard HL7 FHIR R4 (4.0.1) and R5 (5.0.0).
  */
-export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializationOptions): FHIRBundle {
+export function serializePatientToFHIR(
+  patient: Patient,
+  options?: FHIRSerializationOptions,
+): FHIRBundle {
   const fhirVer = options?.fhirVersion || 'R4';
   const safeId = cleanFhirId(patient.id);
   const patientUuid = `urn:uuid:${createDeterministicUuid(`patient-${safeId}`)}`;
@@ -398,7 +402,8 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
   // =========================================================================
   // 6. OBSERVATION: FETAL HEART RATE (LOINC 55283-6)
   // =========================================================================
-  const fhrNum = parseInt(String(patient.fhr || '142').replace(/\D/g, ''), 10) || 142;
+  const fhrNum =
+    parseInt(String(patient.fhr || '142').replace(/\D/g, ''), 10) || 142;
   entries.push({
     fullUrl: `urn:uuid:${createDeterministicUuid(`obs-fhr-${safeId}`)}`,
     resource: {
@@ -450,7 +455,8 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
         {
           coding: [
             {
-              system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+              system:
+                'http://terminology.hl7.org/CodeSystem/observation-category',
               code: 'laboratory',
               display: 'Laboratory',
             },
@@ -482,7 +488,10 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
   // =========================================================================
   // 8. OBSERVATION: FUNDAL HEIGHT (LOINC 11881-0)
   // =========================================================================
-  const sfhNum = parseInt(String(patient.fundalHeight || '').replace(/\D/g, ''), 10) || patient.gestationalWeeks || 28;
+  const sfhNum =
+    parseInt(String(patient.fundalHeight || '').replace(/\D/g, ''), 10) ||
+    patient.gestationalWeeks ||
+    28;
   entries.push({
     fullUrl: `urn:uuid:${createDeterministicUuid(`obs-sfh-${safeId}`)}`,
     resource: {
@@ -519,7 +528,10 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
   // =========================================================================
   // 9. CONDITIONS (CLINICAL RISK FLAGS & COMORBIDITIES - SNOMED CT)
   // =========================================================================
-  if (patient.riskTier === 'high' || (patient.bpSystolic && patient.bpSystolic >= 140)) {
+  if (
+    patient.riskTier === 'high' ||
+    (patient.bpSystolic && patient.bpSystolic >= 140)
+  ) {
     entries.push({
       fullUrl: `urn:uuid:${createDeterministicUuid(`cond-htn-${safeId}`)}`,
       resource: {
@@ -532,7 +544,8 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
         clinicalStatus: {
           coding: [
             {
-              system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+              system:
+                'http://terminology.hl7.org/CodeSystem/condition-clinical',
               code: 'active',
               display: 'Active',
             },
@@ -541,7 +554,8 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
         verificationStatus: {
           coding: [
             {
-              system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+              system:
+                'http://terminology.hl7.org/CodeSystem/condition-ver-status',
               code: 'confirmed',
               display: 'Confirmed',
             },
@@ -551,7 +565,8 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
           {
             coding: [
               {
-                system: 'http://terminology.hl7.org/CodeSystem/condition-category',
+                system:
+                  'http://terminology.hl7.org/CodeSystem/condition-category',
                 code: 'problem-list-item',
                 display: 'Problem List Item',
               },
@@ -566,7 +581,9 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
               display: 'Preeclampsia',
             },
           ],
-          text: patient.riskSubtitle || 'Gestational Hypertension / Preeclampsia Risk',
+          text:
+            patient.riskSubtitle ||
+            'Gestational Hypertension / Preeclampsia Risk',
         },
         subject: patientSubjectRef,
         recordedDate: nowIso.slice(0, 10),
@@ -577,19 +594,20 @@ export function serializePatientToFHIR(patient: Patient, options?: FHIRSerializa
   // =========================================================================
   // 10. ENCOUNTERS (ANTENATAL CLINIC VISITS)
   // =========================================================================
-  const visits = patient.ancVisits && patient.ancVisits.length > 0
-    ? patient.ancVisits
-    : [
-        {
-          visitNo: 1,
-          date: '2024-05-10',
-          poa: `${patient.gestationalWeeks || 12}w`,
-          weightKg: weightVal,
-          bp: `${patient.bpSystolic || 120}/${patient.bpDiastolic || 80}`,
-          examiner: patient.assessedBy || 'PHM Officer',
-          remarks: 'First booking antenatal clinic visit documented.',
-        },
-      ];
+  const visits =
+    patient.ancVisits && patient.ancVisits.length > 0
+      ? patient.ancVisits
+      : [
+          {
+            visitNo: 1,
+            date: '2024-05-10',
+            poa: `${patient.gestationalWeeks || 12}w`,
+            weightKg: weightVal,
+            bp: `${patient.bpSystolic || 120}/${patient.bpDiastolic || 80}`,
+            examiner: patient.assessedBy || 'PHM Officer',
+            remarks: 'First booking antenatal clinic visit documented.',
+          },
+        ];
 
   visits.forEach((v, idx) => {
     const visitId = `enc-${safeId}-${idx + 1}`;

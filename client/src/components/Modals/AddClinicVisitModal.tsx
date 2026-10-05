@@ -93,6 +93,69 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
   const prevWeightNum = prevVisit ? prevVisit.weightKg : patient.weightKg || currentWeightNum;
   const weightDelta = +(currentWeightNum - prevWeightNum).toFixed(1);
 
+  // 1. Auto-fill Low Risk ANC Visit
+  const handleFillLowRiskVisit = () => {
+    setBpSystolic('116');
+    setBpDiastolic('76');
+    setFhr('140');
+    const baseW = patient?.weightKg || 60;
+    setWeightKg((baseW + 1.2).toFixed(1));
+    setSfhCm(`${gestationalWeeks || patient?.gestationalWeeks || 32}`);
+    setPresentation('Cephalic (Vertex)');
+    setEngagement(gestationalWeeks > 36 ? 'Engaged' : 'Not engaged');
+    setFm('Active (>10/12h)');
+    setUrineAlb('Nil');
+    setUrineSug('Nil');
+    setEdema('Nil');
+    setIfaIssued(true);
+    setCalciumIssued(true);
+    setVitCIssued(true);
+    setFoodSupplement(false);
+    setRemarks('Routine normal visit: Blood pressure optimal (116/76 mmHg), fetal growth consistent with dates, active fetal movement. Routine supplements issued.');
+  };
+
+  // 2. Auto-fill Mid / Moderate Risk ANC Visit
+  const handleFillMidRiskVisit = () => {
+    setBpSystolic('134');
+    setBpDiastolic('86');
+    setFhr('146');
+    const baseW = patient?.weightKg || 60;
+    setWeightKg((baseW + 2.4).toFixed(1));
+    setSfhCm(`${(gestationalWeeks || patient?.gestationalWeeks || 32) + 1}`);
+    setPresentation('Cephalic (Vertex)');
+    setEngagement('Not engaged');
+    setFm('Active (>10/12h)');
+    setUrineAlb('Trace');
+    setUrineSug('Nil');
+    setEdema('Pedal (+)');
+    setIfaIssued(true);
+    setCalciumIssued(true);
+    setVitCIssued(true);
+    setFoodSupplement(true);
+    setRemarks('Moderate risk checkup: Borderline elevated BP (134/86 mmHg), trace albuminuria, and mild ankle swelling noted. Advised rest, fluid intake, and review in 1 week.');
+  };
+
+  // 3. Auto-fill High Risk ANC Visit
+  const handleFillHighRiskVisit = () => {
+    setBpSystolic('150');
+    setBpDiastolic('98');
+    setFhr('156');
+    const baseW = patient?.weightKg || 60;
+    setWeightKg((baseW + 3.8).toFixed(1));
+    setSfhCm(`${gestationalWeeks || patient?.gestationalWeeks || 32}`);
+    setPresentation('Cephalic (Vertex)');
+    setEngagement('Not engaged');
+    setFm('Reduced (<10/12h)');
+    setUrineAlb('2+');
+    setUrineSug('Nil');
+    setEdema('Generalized (++)');
+    setIfaIssued(true);
+    setCalciumIssued(true);
+    setVitCIssued(true);
+    setFoodSupplement(true);
+    setRemarks('CRITICAL HIGH-RISK ALERT: Severe pregnancy-induced hypertension (150/98 mmHg), 2+ proteinuria, generalized edema, and reduced fetal movement. Immediate MOH Doctor notification and tertiary referral.');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -210,38 +273,48 @@ export const AddClinicVisitModal: React.FC<AddClinicVisitModalProps> = ({
           )}
 
           {/* 1-Tap Fast Fill Helper Bar for Midwives */}
-          <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+          <div className="bg-[#f8fafc] border border-[#cbd5e1] rounded-xl p-3 sm:p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
             <div>
-              <div className="text-xs font-bold text-[#1e40af] flex items-center gap-1.5">
-                <span>✨ Midwife Fast Fill</span>
+              <div className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
+                <span>✨ Auto-Fill Visit Preset</span>
+                <span className="text-[10px] text-[#64748b] font-normal hidden sm:inline">• 1-tap clinical data fill</span>
               </div>
-              <p className="text-[11px] text-[#3b82f6] mt-0.5">
-                1-tap presets to instantly fill standard normal vitals and routine tests
+              <p className="text-[11px] text-[#64748b] mt-0.5">
+                Instantly populate visit vitals, fetal assessment, urine labs, and clinical notes:
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setBpSystolic('120');
-                setBpDiastolic('80');
-                setFhr('140');
-                setSfhCm(`${gestationalWeeks}`);
-                setPresentation('Cephalic (Vertex)');
-                setEngagement(gestationalWeeks > 36 ? 'Engaged' : 'Not engaged');
-                setFm('Active (>10/12h)');
-                setUrineAlb('Nil');
-                setUrineSug('Nil');
-                setEdema('Nil');
-                setIfaIssued(true);
-                setCalciumIssued(true);
-                setVitCIssued(true);
-                setFoodSupplement(true);
-                setRemarks('Routine antenatal checkup. Fetal heartbeat regular. Advised balanced nutrition, hydration, and danger sign awareness.');
-              }}
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
-            >
-              Fill Routine Normal Visit
-            </button>
+
+            <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
+              <button
+                type="button"
+                onClick={handleFillLowRiskVisit}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#065f46] bg-[#d1fae5] hover:bg-[#a7f3d0] border border-[#6ee7b7] px-3 py-1.5 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
+                title="Auto-fill Low Risk visit vitals (Optimal BP 116/76, normal FHR 140, Nil albumin)"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+                <span>Low Risk Visit</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFillMidRiskVisit}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#92400e] bg-[#fef3c7] hover:bg-[#fde68a] border border-[#fcd34d] px-3 py-1.5 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
+                title="Auto-fill Mid / Moderate Risk visit vitals (Borderline BP 134/86, Trace albumin, Pedal edema)"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#f59e0b]" />
+                <span>Mid Risk Visit</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFillHighRiskVisit}
+                className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 text-xs font-bold text-[#991b1b] bg-[#fee2e2] hover:bg-[#fecaca] border border-[#fca5a5] px-3 py-1.5 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
+                title="Auto-fill High Risk visit vitals (Severe HTN 150/98, 2+ albumin, Generalized edema)"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
+                <span>High Risk Visit</span>
+              </button>
+            </div>
           </div>
 
           {/* Section 1: Visit Timing & POA */}

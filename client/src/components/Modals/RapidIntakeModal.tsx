@@ -336,13 +336,22 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     computedPretermProb = 34;
   }
 
-  // Pre-fill demo sample data
-  const handlePrefillDemo = () => {
+  const getSafeNic = (baseNic: string) => {
+    if (!existingPatients || existingPatients.length === 0) return baseNic;
+    const isUsed = existingPatients.some((p) => p.nicNo?.toUpperCase() === baseNic.toUpperCase());
+    if (isUsed) {
+      return `${baseNic.slice(0, 8)}${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+    return baseNic;
+  };
+
+  // 1. Auto-fill Low Risk Mother
+  const handlePrefillLowRisk = () => {
     setRecordDate('2024-04-12');
     setName('Kumari Sandamali Perera');
     setAge('26');
     setDob('1998-05-14');
-    setNicNo('199864201234');
+    setNicNo(getSafeNic('199864201234'));
     setPhmRegisterNo('PHM/2026/042');
     setMohArea(currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur / Division 4B'));
     setVillage(currentClinic?.division || 'Rampur North Sector 2');
@@ -357,13 +366,13 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     setWeeks('28');
     setDays('3');
     setHeightCm('158');
-    setWeightKg('64.5');
+    setWeightKg('55.0');
     setBloodGroup('B +ve');
-    setSystolic('124');
-    setDiastolic('82');
-    setHb('11.6');
+    setSystolic('118');
+    setDiastolic('76');
+    setHb('12.2');
     setFundalHeight('28');
-    setFhr('142');
+    setFhr('140');
     setUrineAlbumin('Nil');
     setUrineSugar('Nil');
     setVdrl('Non-reactive');
@@ -393,9 +402,133 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
     setVaginalBleeding(false);
     setReducedMovements(false);
     setEdema(false);
-    setIntendedHospital(currentClinic?.district ? `Base Hospital ${currentClinic.district}` : 'Base Hospital Rampur (Specialist Unit)');
+    setIntendedHospital(currentClinic?.district ? `Base Hospital ${currentClinic.district}` : 'Base Hospital Rampur');
     setEmergencyTransportReady(true);
-    setNotes('Healthy primipara progression. Baseline blood group confirmed B +ve. Folic acid and IFA issued.');
+    setNotes('Low risk pregnancy: Maternal vitals and fetal heart sound completely normal. Standard IFA and calcium supplementation issued.');
+  };
+
+  // 2. Auto-fill Mid / Moderate Risk Mother
+  const handlePrefillMidRisk = () => {
+    setRecordDate('2024-04-28');
+    setName('Fathima Rihana Farook');
+    setAge('31');
+    setDob('1993-09-12');
+    setNicNo(getSafeNic('199375402319'));
+    setPhmRegisterNo('PHM/2026/067');
+    setMohArea(currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur / Division 4B'));
+    setVillage(currentClinic?.division || 'Rampur North Sector 2');
+    setLocality(currentClinic?.name || 'GN Division 14');
+    setPhone('071 654 3210');
+    setPartnerName('Mohammed Farook');
+    setPartnerAge('35');
+    setPartnerOccupation('Retail Shop Manager');
+    setLmp('2024-04-28');
+    setEdd('2025-02-02');
+    setPoaAtBooking('10w 1d');
+    setWeeks('26');
+    setDays('2');
+    setHeightCm('154');
+    setWeightKg('68.5');
+    setBloodGroup('O +ve');
+    setSystolic('134');
+    setDiastolic('86');
+    setHb('10.4');
+    setFundalHeight('26');
+    setFhr('144');
+    setUrineAlbumin('Trace');
+    setUrineSugar('Nil');
+    setVdrl('Non-reactive');
+    setRubella('Immune');
+    setHiv('Non-reactive');
+    setHbsAg('Negative');
+    setFbs('94 mg/dL');
+    setGravida('3');
+    setPara('1');
+    setLivingChildren('1');
+    setAbortions('1');
+    setPrevLscs(true);
+    setPrevPreterm(false);
+    setPrevPph(false);
+    setStillbirth(false);
+    setMedDiabetes(false);
+    setMedHtn(false);
+    setMedCardiac(false);
+    setMedAsthma(false);
+    setMedThyroid(true);
+    setMedEpilepsy(false);
+    setMedThalassaemia(false);
+    setAllergies('Penicillin (mild rash)');
+    setSevereHeadache(false);
+    setBlurredVision(false);
+    setEpigastricPain(false);
+    setVaginalBleeding(false);
+    setReducedMovements(false);
+    setEdema(true);
+    setIntendedHospital(currentClinic?.district ? `District General Hospital ${currentClinic.district}` : 'District General Hospital');
+    setEmergencyTransportReady(true);
+    setNotes('Moderate risk profile: Mild gestational anemia (Hb 10.4 g/dL), previous LSCS scar monitoring, and mild ankle edema. Doubled IFA supplementation and nutrition counseling provided.');
+  };
+
+  // 3. Auto-fill High Risk Mother
+  const handlePrefillHighRisk = () => {
+    setRecordDate('2024-03-16');
+    setName('Nirmala Kanthi Jayasinghe');
+    setAge('36');
+    setDob('1988-11-20');
+    setNicNo(getSafeNic('198882504910'));
+    setPhmRegisterNo('PHM/2026/089');
+    setMohArea(currentClinic?.mohArea || (currentClinic?.name ? `${currentClinic.name} MOH` : 'MOH Rampur / Division 4B'));
+    setVillage(currentClinic?.division || 'Rampur North Sector 2');
+    setLocality(currentClinic?.name || 'GN Division 14');
+    setPhone('072 876 5432');
+    setPartnerName('Kamal Jayasinghe');
+    setPartnerAge('40');
+    setPartnerOccupation('Tea Estate Field Supervisor');
+    setLmp('2024-03-16');
+    setEdd('2024-12-21');
+    setPoaAtBooking('9w 0d');
+    setWeeks('32');
+    setDays('1');
+    setHeightCm('152');
+    setWeightKg('74.0');
+    setBloodGroup('O -ve');
+    setSystolic('148');
+    setDiastolic('96');
+    setHb('9.8');
+    setFundalHeight('30');
+    setFhr('152');
+    setUrineAlbumin('2+');
+    setUrineSugar('Nil');
+    setVdrl('Non-reactive');
+    setRubella('Immune');
+    setHiv('Non-reactive');
+    setHbsAg('Negative');
+    setFbs('105 mg/dL');
+    setGravida('4');
+    setPara('2');
+    setLivingChildren('1');
+    setAbortions('1');
+    setPrevLscs(true);
+    setPrevPreterm(true);
+    setPrevPph(false);
+    setStillbirth(false);
+    setMedDiabetes(false);
+    setMedHtn(true);
+    setMedCardiac(false);
+    setMedAsthma(false);
+    setMedThyroid(false);
+    setMedEpilepsy(false);
+    setMedThalassaemia(false);
+    setAllergies('None known');
+    setSevereHeadache(true);
+    setBlurredVision(true);
+    setEpigastricPain(false);
+    setVaginalBleeding(false);
+    setReducedMovements(false);
+    setEdema(true);
+    setIntendedHospital('Teaching Hospital Kandy (Obstetric Specialist Unit)');
+    setEmergencyTransportReady(true);
+    setNotes('HIGH RISK ALERT: Gestational hypertension (148/96 mmHg) with 2+ proteinuria, frontal headache, visual disturbance, and previous preterm birth. Immediate MOH Doctor supervisory review and specialist referral protocol activated.');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -662,15 +795,36 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-[#64748b] mr-1 hidden sm:inline">Auto-fill:</span>
             <button
               type="button"
-              onClick={handlePrefillDemo}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#006194] bg-[#e0f2fe] hover:bg-[#bae6fd] border border-[#7dd3fc] px-3 py-1.5 rounded-md transition-colors cursor-pointer"
-              title="Populate sample data for demonstration"
+              onClick={handlePrefillLowRisk}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#065f46] bg-[#d1fae5] hover:bg-[#a7f3d0] border border-[#6ee7b7] px-2.5 sm:px-3 py-1.5 rounded-md transition-all shadow-2xs cursor-pointer active:scale-95"
+              title="Auto-fill with Low Risk maternal data"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              Pre-fill Sample Data
+              <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+              <span>Low Risk</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrefillMidRisk}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#92400e] bg-[#fef3c7] hover:bg-[#fde68a] border border-[#fcd34d] px-2.5 sm:px-3 py-1.5 rounded-md transition-all shadow-2xs cursor-pointer active:scale-95"
+              title="Auto-fill with Mid / Moderate Risk maternal data"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#f59e0b]" />
+              <span>Mid Risk</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrefillHighRisk}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#991b1b] bg-[#fee2e2] hover:bg-[#fecaca] border border-[#fca5a5] px-2.5 sm:px-3 py-1.5 rounded-md transition-all shadow-2xs cursor-pointer active:scale-95"
+              title="Auto-fill with High Risk maternal data"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
+              <span>High Risk</span>
             </button>
           </div>
         </div>
@@ -1840,15 +1994,37 @@ export const RapidIntakeModal: React.FC<RapidIntakeModalProps> = ({
             Cancel
           </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrefillDemo}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#006194] bg-white border border-[#cbd5e1] rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Reset / Sample Data
-            </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            <div className="hidden sm:flex items-center gap-1 mr-1">
+              <span className="text-[10.5px] uppercase font-bold text-[#64748b] mr-0.5">Fill:</span>
+              <button
+                type="button"
+                onClick={handlePrefillLowRisk}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-[#065f46] bg-[#d1fae5] hover:bg-[#a7f3d0] border border-[#6ee7b7] rounded-lg transition-colors cursor-pointer"
+                title="Auto-fill Low Risk"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+                Low
+              </button>
+              <button
+                type="button"
+                onClick={handlePrefillMidRisk}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-[#92400e] bg-[#fef3c7] hover:bg-[#fde68a] border border-[#fcd34d] rounded-lg transition-colors cursor-pointer"
+                title="Auto-fill Mid / Moderate Risk"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
+                Mid
+              </button>
+              <button
+                type="button"
+                onClick={handlePrefillHighRisk}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-[#991b1b] bg-[#fee2e2] hover:bg-[#fecaca] border border-[#fca5a5] rounded-lg transition-colors cursor-pointer"
+                title="Auto-fill High Risk"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444]" />
+                High
+              </button>
+            </div>
 
             <button
               type="submit"
